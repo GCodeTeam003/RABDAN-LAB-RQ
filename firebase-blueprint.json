@@ -1,0 +1,74 @@
+{
+  "entities": {
+    "lab": {
+      "title": "Laporan Anggaran Bulanan (LAB)",
+      "description": "Laporan pertanggungjawaban kas dan keuangan bulanan Rumah Qur'an Ulul Azmi",
+      "type": "object",
+      "properties": {
+        "nomor": { "type": "string", "maxLength": 100 },
+        "bulan": { "type": "string", "maxLength": 50 },
+        "tahun": { "type": "number" },
+        "tanggal": { "type": "string", "maxLength": 50 },
+        "kota": { "type": "string", "maxLength": 100 },
+        "ketuaRQ": { "type": "string", "maxLength": 100 },
+        "bendaharaRQ": { "type": "string", "maxLength": 100 },
+        "saldoAwal": { "type": "number" },
+        "totalMasuk": { "type": "number" },
+        "totalKeluar": { "type": "number" },
+        "saldoAkhir": { "type": "number" },
+        "trxCount": { "type": "number" },
+        "hasLink": { "type": "boolean" },
+        "createdAt": { "type": "string", "maxLength": 100 }
+      },
+      "required": ["nomor", "bulan", "tahun", "saldoAwal"]
+    },
+    "transaksi": {
+      "title": "Transaksi Kas",
+      "description": "Catatan penerimaan atau pengeluaran kas keuangan harian",
+      "type": "object",
+      "properties": {
+        "idLAB": { "type": "string", "maxLength": 100 },
+        "tanggal": { "type": "string", "maxLength": 50 },
+        "keterangan": { "type": "string", "maxLength": 500 },
+        "masuk": { "type": "number" },
+        "keluar": { "type": "number" },
+        "createdAt": { "type": "string", "maxLength": 100 }
+      },
+      "required": ["idLAB", "tanggal", "keterangan"]
+    },
+    "rab": {
+      "title": "Rencana Anggaran Biaya (RAB)",
+      "description": "Rencana anggaran dan rincian belanja operasional bulanan",
+      "type": "object",
+      "properties": {
+        "nomor": { "type": "string", "maxLength": 100 },
+        "bulan": { "type": "string", "maxLength": 50 },
+        "tahun": { "type": "number" },
+        "tanggal": { "type": "string", "maxLength": 50 },
+        "kota": { "type": "string", "maxLength": 100 },
+        "ketuaRQ": { "type": "string", "maxLength": 100 },
+        "bendaharaRQ": { "type": "string", "maxLength": 100 },
+        "ketuaYayasan": { "type": "string", "maxLength": 100 },
+        "total": { "type": "number" },
+        "itemCount": { "type": "number" },
+        "hasLink": { "type": "boolean" },
+        "createdAt": { "type": "string", "maxLength": 100 }
+      },
+      "required": ["nomor", "bulan", "tahun", "total"]
+    }
+  },
+  "firestore": {
+    "/lab/{labId}": {
+      "schema": "lab",
+      "description": "Koleksi dokumen LAB bulanan"
+    },
+    "/transaksi/{transaksiId}": {
+      "schema": "transaksi",
+      "description": "Koleksi transaksi kas masuk dan keluar"
+    },
+    "/rab/{rabId}": {
+      "schema": "rab",
+      "description": "Koleksi proposal RAB bulanan"
+    }
+  }
+}

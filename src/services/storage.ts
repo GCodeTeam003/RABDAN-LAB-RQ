@@ -1,4 +1,13 @@
 import { LABRecord, RABRecord, TransaksiRecord } from '../types';
+import {
+  getFirestoreAllData,
+  saveFirestoreLAB,
+  saveFirestoreRAB,
+  saveFirestoreTransaksi,
+  deleteFirestoreLAB,
+  deleteFirestoreRAB,
+  deleteFirestoreTransaksi,
+} from './firestoreService';
 
 const STORAGE_LAB_KEY = 'rq_ulul_azmi_lab_master_v1';
 const STORAGE_RAB_KEY = 'rq_ulul_azmi_rab_master_v1';
@@ -39,7 +48,7 @@ export function saveLocalData(
 }
 
 /**
- * Fetch all shared real-time data from the centralized server database (always connected to Google Sheets)
+ * Fetch all shared real-time data from Cloud Database (Firestore) or server database
  */
 export async function fetchSharedData(): Promise<{
   labList: LABRecord[];
@@ -47,12 +56,36 @@ export async function fetchSharedData(): Promise<{
   transaksiList: TransaksiRecord[];
   sheetConfig?: any;
 }> {
+  // 1. Try fetching from Cloud Firestore
+  try {
+    const firestoreData = await getFirestoreAllData();
+    if (
+      firestoreData.labList.length > 0 ||
+      firestoreData.rabList.length > 0 ||
+      firestoreData.transaksiList.length > 0
+    ) {
+      saveLocalData(
+        firestoreData.labList,
+        firestoreData.rabList,
+        firestoreData.transaksiList
+      );
+      return firestoreData;
+    }
+  } catch (err) {
+    console.warn('Firestore fetch notice, trying server fallback:', err);
+  }
+
+  // 2. Fallback to centralized server API
   try {
     const res = await fetch('/api/data');
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const json = await res.json();
     if (json.ok) {
       saveLocalData(json.labList, json.rabList, json.transaksiList);
+
+      // Seed server data to Cloud Firestore if Firestore was empty
+      seedToFirestoreIfEmpty(json.labList, json.rabList, json.transaksiList);
+
       return {
         labList: json.labList,
         rabList: json.rabList,
@@ -63,15 +96,44 @@ export async function fetchSharedData(): Promise<{
   } catch (err) {
     console.warn('Server fetch failed, falling back to local mirror:', err);
   }
+
   return getLocalData();
 }
 
+async function seedToFirestoreIfEmpty(
+  labs: LABRecord[],
+  rabs: RABRecord[],
+  trxs: TransaksiRecord[]
+) {
+  try {
+    for (const l of labs) {
+      await saveFirestoreLAB(l);
+    }
+    for (const r of rabs) {
+      await saveFirestoreRAB(r);
+    }
+    for (const t of trxs) {
+      await saveFirestoreTransaksi(t);
+    }
+  } catch (e) {
+    // Non-blocking
+  }
+}
+
 /**
- * Persists a new transaction to the shared centralized database
+ * Persists a new transaction to Cloud Firestore and centralized server
  */
 export async function persistTransaksi(
   trx: TransaksiRecord
 ): Promise<{ ok: boolean; syncedToSheets: boolean; updatedLAB?: LABRecord }> {
+  // 1. Save to Cloud Firestore
+  try {
+    await saveFirestoreTransaksi(trx);
+  } catch (err) {
+    console.warn('Failed saving to Firestore directly:', err);
+  }
+
+  // 2. Also persist to Express server API for Google Sheet webhook sync & local file backup
   try {
     const res = await fetch('/api/transaksi', {
       method: 'POST',
@@ -86,7 +148,7 @@ export async function persistTransaksi(
     console.error('Error posting transaksi to server:', err);
   }
 
-  // Fallback to local
+  // Local fallback
   const local = getLocalData();
   const updatedTrx = [trx, ...local.transaksiList];
   saveLocalData(local.labList, local.rabList, updatedTrx);
@@ -94,11 +156,19 @@ export async function persistTransaksi(
 }
 
 /**
- * Persists a new LAB to the shared centralized database
+ * Persists a new LAB to Cloud Firestore and centralized server
  */
 export async function persistLAB(
   lab: LABRecord
 ): Promise<{ ok: boolean; syncedToSheets: boolean }> {
+  // 1. Save to Cloud Firestore
+  try {
+    await saveFirestoreLAB(lab);
+  } catch (err) {
+    console.warn('Failed saving LAB to Firestore directly:', err);
+  }
+
+  // 2. Persist to server API
   try {
     const res = await fetch('/api/lab', {
       method: 'POST',
@@ -119,11 +189,19 @@ export async function persistLAB(
 }
 
 /**
- * Persists a new RAB to the shared centralized database
+ * Persists a new RAB to Cloud Firestore and centralized server
  */
 export async function persistRAB(
   rab: RABRecord
 ): Promise<{ ok: boolean; syncedToSheets: boolean }> {
+  // 1. Save to Cloud Firestore
+  try {
+    await saveFirestoreRAB(rab);
+  } catch (err) {
+    console.warn('Failed saving RAB to Firestore directly:', err);
+  }
+
+  // 2. Persist to server API
   try {
     const res = await fetch('/api/rab', {
       method: 'POST',
@@ -144,9 +222,15 @@ export async function persistRAB(
 }
 
 /**
- * Delete a transaction from the shared database
+ * Delete a transaction from Cloud Firestore and shared database
  */
 export async function deleteLocalTransaksi(idTrx: string): Promise<boolean> {
+  try {
+    await deleteFirestoreTransaksi(idTrx);
+  } catch (err) {
+    console.warn('Failed deleting from Firestore:', err);
+  }
+
   try {
     const res = await fetch(`/api/transaksi/${idTrx}`, { method: 'DELETE' });
     if (res.ok) return true;
@@ -161,9 +245,15 @@ export async function deleteLocalTransaksi(idTrx: string): Promise<boolean> {
 }
 
 /**
- * Delete a LAB record from the shared database
+ * Delete a LAB record from Cloud Firestore and shared database
  */
 export async function deleteLocalLAB(idLAB: string): Promise<boolean> {
+  try {
+    await deleteFirestoreLAB(idLAB);
+  } catch (err) {
+    console.warn('Failed deleting LAB from Firestore:', err);
+  }
+
   try {
     const res = await fetch(`/api/lab/${idLAB}`, { method: 'DELETE' });
     if (res.ok) return true;
@@ -178,9 +268,15 @@ export async function deleteLocalLAB(idLAB: string): Promise<boolean> {
 }
 
 /**
- * Delete a RAB record from the shared database
+ * Delete a RAB record from Cloud Firestore and shared database
  */
 export async function deleteLocalRAB(idRAB: string): Promise<boolean> {
+  try {
+    await deleteFirestoreRAB(idRAB);
+  } catch (err) {
+    console.warn('Failed deleting RAB from Firestore:', err);
+  }
+
   try {
     const res = await fetch(`/api/rab/${idRAB}`, { method: 'DELETE' });
     if (res.ok) return true;

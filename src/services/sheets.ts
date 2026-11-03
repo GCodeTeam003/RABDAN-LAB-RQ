@@ -115,6 +115,21 @@ export async function createDatabaseSpreadsheet(
   };
 }
 
+export function extractSpreadsheetId(input: string): string {
+  if (!input) return '';
+  const trimmed = input.trim();
+  // Match https://docs.google.com/spreadsheets/d/{ID}/...
+  const match = trimmed.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+  if (match && match[1]) {
+    return match[1];
+  }
+  // If it's already an ID (alphanumeric, dashes, underscores, length >= 20)
+  if (/^[a-zA-Z0-9-_]{20,}$/.test(trimmed)) {
+    return trimmed;
+  }
+  return trimmed;
+}
+
 export async function checkSpreadsheetExists(
   token: string,
   spreadsheetId: string
@@ -141,43 +156,115 @@ export async function appendRowToSheet(
   range: string,
   rowValues: any[]
 ): Promise<boolean> {
-  const res = await fetch(
-    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(range)}:append?valueInputOption=USER_ENTERED`,
-    {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        values: [rowValues],
-      }),
-    }
-  );
-  return res.ok;
+  try {
+    const res = await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(range)}:append?valueInputOption=USER_ENTERED`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          values: [rowValues],
+        }),
+      }
+    );
+    return res.ok;
+  } catch (e) {
+    console.warn('Failed to append row to Google Sheet:', e);
+    return false;
+  }
 }
 
-export async function appendMultipleRowsToSheet(
+/**
+ * Upload all current app records to the Google Sheet directly
+ */
+export async function syncEntireDatabaseToSheets(
   token: string,
   spreadsheetId: string,
-  range: string,
-  rows: any[][]
-): Promise<boolean> {
-  if (rows.length === 0) return true;
-  const res = await fetch(
-    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(range)}:append?valueInputOption=USER_ENTERED`,
-    {
+  labList: LABRecord[],
+  transaksiList: TransaksiRecord[],
+  rabList: RABRecord[]
+): Promise<{ ok: boolean; message: string }> {
+  try {
+    // 1. Prepare LAB_Master rows
+    const labRows = [
+      [
+        'ID', 'Nomor Surat', 'Bulan', 'Tahun', 'Tanggal Surat', 'Kota',
+        'Ketua RQ', 'Bendahara RQ', 'Saldo Awal', 'Total Masuk', 'Total Keluar',
+        'Saldo Akhir', 'Jumlah Transaksi', 'Status PDF', 'Link PDF', 'Created At'
+      ],
+      ...labList.map((l) => [
+        l.id, l.nomor, l.bulan, l.tahun, l.tanggal, l.kota,
+        l.ketuaRQ, l.bendaharaRQ, l.saldoAwal, l.totalMasuk, l.totalKeluar,
+        l.saldoAkhir, l.trxCount, l.hasLink ? 'Ada' : 'Belum', l.linkPDF || '', l.createdAt
+      ])
+    ];
+
+    // 2. Prepare Transaksi rows
+    const trxRows = [
+      ['ID', 'ID LAB', 'Tanggal', 'Keterangan', 'Masuk', 'Keluar', 'Created At'],
+      ...transaksiList.map((t) => [
+        t.id, t.idLAB, t.tanggal, t.keterangan, t.masuk, t.keluar, t.createdAt
+      ])
+    ];
+
+    // 3. Prepare RAB_Master & RAB_Items rows
+    const rabRows = [
+      [
+        'ID', 'Nomor Surat', 'Bulan', 'Tahun', 'Tanggal Surat', 'Kota',
+        'Ketua RQ', 'Bendahara RQ', 'Ketua Yayasan', 'Total Anggaran', 'Jumlah Item',
+        'Status PDF', 'Link PDF', 'Created At'
+      ],
+      ...rabList.map((r) => [
+        r.id, r.nomor, r.bulan, r.tahun, r.tanggal, r.kota,
+        r.ketuaRQ, r.bendaharaRQ, r.ketuaYayasan, r.total, r.itemCount,
+        r.hasLink ? 'Ada' : 'Belum', r.linkPDF || '', r.createdAt
+      ])
+    ];
+
+    const rabItemRows: any[][] = [
+      ['ID', 'ID RAB', 'No', 'Rincian Kebutuhan', 'Jumlah Rp', 'Created At']
+    ];
+    rabList.forEach((r) => {
+      (r.items || []).forEach((item, idx) => {
+        rabItemRows.push([
+          item.id, r.id, idx + 1, item.rincian, item.jumlah, r.createdAt
+        ]);
+      });
+    });
+
+    // Write all ranges via batchUpdate
+    const payload = {
+      valueInputOption: 'USER_ENTERED',
+      data: [
+        { range: 'LAB_Master!A1:P' + Math.max(labRows.length, 2), values: labRows },
+        { range: 'Transaksi!A1:G' + Math.max(trxRows.length, 2), values: trxRows },
+        { range: 'RAB_Master!A1:N' + Math.max(rabRows.length, 2), values: rabRows },
+        { range: 'RAB_Items!A1:F' + Math.max(rabItemRows.length, 2), values: rabItemRows },
+      ],
+    };
+
+    const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values:batchUpdate`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        values: rows,
-      }),
+      body: JSON.stringify(payload),
+    });
+
+    if (!res.ok) {
+      const errTxt = await res.text();
+      throw new Error(`Google Sheets API Error (${res.status}): ${errTxt}`);
     }
-  );
-  return res.ok;
+
+    return { ok: true, message: 'Berhasil menyinkronkan semua data ke Google Sheet!' };
+  } catch (err: any) {
+    console.error('Error in syncEntireDatabaseToSheets:', err);
+    throw err;
+  }
 }
 
 export async function fetchSheetData(
@@ -296,4 +383,85 @@ export async function loadAllDataFromGoogleSheet(
     console.error('Error fetching sheet data:', err);
     throw err;
   }
+}
+
+/**
+ * Export data as downloadable CSV files
+ */
+export function exportToCSV(
+  dataType: 'transaksi' | 'lab' | 'rab',
+  data: any[]
+) {
+  let csvContent = '';
+  let filename = '';
+
+  if (dataType === 'transaksi') {
+    filename = `Transaksi_FIA_${new Date().toISOString().slice(0, 10)}.csv`;
+    const headers = ['ID', 'ID LAB', 'Tanggal', 'Keterangan', 'Masuk', 'Keluar', 'Created At'];
+    const rows = data.map((t: TransaksiRecord) => [
+      `"${t.id}"`,
+      `"${t.idLAB}"`,
+      `"${t.tanggal}"`,
+      `"${(t.keterangan || '').replace(/"/g, '""')}"`,
+      t.masuk || 0,
+      t.keluar || 0,
+      `"${t.createdAt}"`,
+    ]);
+    csvContent = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+  } else if (dataType === 'lab') {
+    filename = `LAB_Master_FIA_${new Date().toISOString().slice(0, 10)}.csv`;
+    const headers = [
+      'ID', 'Nomor Surat', 'Bulan', 'Tahun', 'Tanggal Surat', 'Kota',
+      'Ketua RQ', 'Bendahara RQ', 'Saldo Awal', 'Total Masuk', 'Total Keluar',
+      'Saldo Akhir', 'Jumlah Transaksi', 'Created At'
+    ];
+    const rows = data.map((l: LABRecord) => [
+      `"${l.id}"`,
+      `"${l.nomor}"`,
+      `"${l.bulan}"`,
+      l.tahun,
+      `"${l.tanggal}"`,
+      `"${l.kota}"`,
+      `"${l.ketuaRQ}"`,
+      `"${l.bendaharaRQ}"`,
+      l.saldoAwal,
+      l.totalMasuk,
+      l.totalKeluar,
+      l.saldoAkhir,
+      l.trxCount,
+      `"${l.createdAt}"`,
+    ]);
+    csvContent = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+  } else if (dataType === 'rab') {
+    filename = `RAB_Master_FIA_${new Date().toISOString().slice(0, 10)}.csv`;
+    const headers = [
+      'ID', 'Nomor Surat', 'Bulan', 'Tahun', 'Tanggal Surat', 'Kota',
+      'Ketua RQ', 'Bendahara RQ', 'Ketua Yayasan', 'Total Anggaran', 'Jumlah Item', 'Created At'
+    ];
+    const rows = data.map((r: RABRecord) => [
+      `"${r.id}"`,
+      `"${r.nomor}"`,
+      `"${r.bulan}"`,
+      r.tahun,
+      `"${r.tanggal}"`,
+      `"${r.kota}"`,
+      `"${r.ketuaRQ}"`,
+      `"${r.bendaharaRQ}"`,
+      `"${r.ketuaYayasan}"`,
+      r.total,
+      r.itemCount,
+      `"${r.createdAt}"`,
+    ]);
+    csvContent = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+  }
+
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.setAttribute('href', url);
+  link.setAttribute('download', filename);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
 }

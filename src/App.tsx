@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { User } from 'firebase/auth';
 import { Navbar } from './components/Navbar';
 import { BottomNav } from './components/BottomNav';
 import { TabTransaksi } from './components/TabTransaksi';
@@ -17,15 +18,25 @@ import {
   deleteLocalLAB,
   deleteLocalRAB,
 } from './services/storage';
+import { initAuth, googleSignIn, logout } from './services/auth';
+import { appendRowToSheet, SHEET_ID_KEY, extractSpreadsheetId } from './services/sheets';
+import { subscribeToFirestoreData } from './services/firestoreService';
+import { testFirestoreConnection } from './lib/firebase';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<'transaksi' | 'lab' | 'rab' | 'riwayat'>('transaksi');
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [sheetTitle, setSheetTitle] = useState<string>('Database Keuangan RQ Ulul Azmi (RAB & LAB)');
-  const [webAppUrl, setWebAppUrl] = useState<string>(
-    'https://script.google.com/macros/s/AKfycby_qu393Ks92Sqp6NhkObIjiuTmQo4nDcCOPCc7uTOh2y4ikulZVA2dopXk9Ve0nYZo/exec'
-  );
+  const [webAppUrl, setWebAppUrl] = useState<string>('');
+  const [spreadsheetId, setSpreadsheetId] = useState<string>(() => {
+    return localStorage.getItem(SHEET_ID_KEY) || '';
+  });
   const [isSheetModalOpen, setIsSheetModalOpen] = useState<boolean>(false);
+
+  // Auth state for direct Google Sheets API connection
+  const [user, setUser] = useState<User | null>(null);
+  const [accessToken, setAccessToken] = useState<string | null>(null);
+  const [isLoggingIn, setIsLoggingIn] = useState<boolean>(false);
 
   // Shared Multi-user App Data
   const [labList, setLabList] = useState<LABRecord[]>([]);
@@ -59,15 +70,32 @@ export default function App() {
     }, 4500);
   }, []);
 
+  // Initialize Firebase Auth listener
+  useEffect(() => {
+    const unsubscribe = initAuth(
+      (currentUser, token) => {
+        setUser(currentUser);
+        setAccessToken(token);
+      },
+      () => {
+        setUser(null);
+        setAccessToken(null);
+      }
+    );
+    return () => {
+      if (typeof unsubscribe === 'function') unsubscribe();
+    };
+  }, []);
+
   // Fetch shared database data from central server
   const loadSharedData = useCallback(async (silent = false) => {
     if (!silent) setIsRefreshing(true);
     try {
       const data = await fetchSharedData();
       if (data) {
-        setLabList(data.labList);
-        setRabList(data.rabList);
-        setTransaksiList(data.transaksiList);
+        if (data.labList && data.labList.length > 0) setLabList(data.labList);
+        if (data.rabList && data.rabList.length > 0) setRabList(data.rabList);
+        if (data.transaksiList && data.transaksiList.length > 0) setTransaksiList(data.transaksiList);
         if (data.sheetConfig) {
           if (data.sheetConfig.spreadsheetName) {
             setSheetTitle(data.sheetConfig.spreadsheetName);
@@ -75,31 +103,75 @@ export default function App() {
           if (data.sheetConfig.webAppUrl) {
             setWebAppUrl(data.sheetConfig.webAppUrl);
           }
+          if (data.sheetConfig.spreadsheetId && !spreadsheetId) {
+            setSpreadsheetId(data.sheetConfig.spreadsheetId);
+            localStorage.setItem(SHEET_ID_KEY, data.sheetConfig.spreadsheetId);
+          }
         }
       }
     } catch (e: any) {
       console.warn('Failed to load shared data:', e);
       if (!silent) {
-        showToast('Gagal memuat data terbaru dari server: ' + (e.message || ''), 'error');
+        showToast('Gagal memuat data terbaru: ' + (e.message || ''), 'error');
       }
     } finally {
       if (!silent) setIsRefreshing(false);
     }
-  }, [showToast]);
+  }, [showToast, spreadsheetId]);
 
-  // Initial load and real-time auto-sync polling (every 6 seconds)
+  // Initial load and real-time Firestore auto-sync
   useEffect(() => {
+    testFirestoreConnection();
     loadSharedData();
 
-    // Auto-sync interval so multiple users see updates simultaneously
+    // Real-time Firestore subscription for instantaneous synchronization across all devices
+    const unsubscribeFirestore = subscribeToFirestoreData((data) => {
+      if (data.labList.length > 0 || data.rabList.length > 0 || data.transaksiList.length > 0) {
+        setLabList(data.labList);
+        setRabList(data.rabList);
+        setTransaksiList(data.transaksiList);
+      }
+    });
+
     const interval = setInterval(() => {
       loadSharedData(true);
-    }, 6000);
+    }, 10000);
 
-    return () => clearInterval(interval);
+    return () => {
+      unsubscribeFirestore();
+      clearInterval(interval);
+    };
   }, [loadSharedData]);
 
-  // Handlers for creating records
+  // Google Sign In handler
+  const handleGoogleLogin = async () => {
+    setIsLoggingIn(true);
+    try {
+      const result = await googleSignIn();
+      if (result) {
+        setUser(result.user);
+        setAccessToken(result.accessToken);
+        showToast(`Berhasil terhubung ke akun Google: ${result.user.email}`, 'success');
+      }
+    } catch (err: any) {
+      showToast('Gagal menghubungkan akun Google: ' + (err.message || ''), 'error');
+    } finally {
+      setIsLoggingIn(false);
+    }
+  };
+
+  const handleGoogleLogout = async () => {
+    try {
+      await logout();
+      setUser(null);
+      setAccessToken(null);
+      showToast('Telah keluar dari akun Google.', 'info');
+    } catch (err: any) {
+      showToast('Gagal logout: ' + err.message, 'error');
+    }
+  };
+
+  // Handlers for creating records with dual sync (Server DB + Direct Google Sheet if authenticated)
   const handleSubmitTransaksi = async (data: {
     idLAB: string;
     tanggal: string;
@@ -118,6 +190,21 @@ export default function App() {
     };
 
     const res = await persistTransaksi(newTrx);
+
+    // Direct write to Google Sheets if connected via Google Sheets API
+    const cleanId = extractSpreadsheetId(spreadsheetId);
+    if (accessToken && cleanId) {
+      appendRowToSheet(accessToken, cleanId, 'Transaksi!A:G', [
+        newTrx.id,
+        newTrx.idLAB,
+        newTrx.tanggal,
+        newTrx.keterangan,
+        newTrx.masuk,
+        newTrx.keluar,
+        newTrx.createdAt,
+      ]);
+    }
+
     await loadSharedData(true);
     return { idLAB: data.idLAB, updatedLAB: res.updatedLAB };
   };
@@ -137,6 +224,29 @@ export default function App() {
     };
 
     await persistLAB(newLAB);
+
+    const cleanId = extractSpreadsheetId(spreadsheetId);
+    if (accessToken && cleanId) {
+      appendRowToSheet(accessToken, cleanId, 'LAB_Master!A:P', [
+        newLAB.id,
+        newLAB.nomor,
+        newLAB.bulan,
+        newLAB.tahun,
+        newLAB.tanggal,
+        newLAB.kota,
+        newLAB.ketuaRQ,
+        newLAB.bendaharaRQ,
+        newLAB.saldoAwal,
+        newLAB.totalMasuk,
+        newLAB.totalKeluar,
+        newLAB.saldoAkhir,
+        newLAB.trxCount,
+        'Ada',
+        '',
+        newLAB.createdAt,
+      ]);
+    }
+
     await loadSharedData(true);
     return newLAB;
   };
@@ -152,6 +262,37 @@ export default function App() {
     };
 
     await persistRAB(newRAB);
+
+    const cleanId = extractSpreadsheetId(spreadsheetId);
+    if (accessToken && cleanId) {
+      appendRowToSheet(accessToken, cleanId, 'RAB_Master!A:N', [
+        newRAB.id,
+        newRAB.nomor,
+        newRAB.bulan,
+        newRAB.tahun,
+        newRAB.tanggal,
+        newRAB.kota,
+        newRAB.ketuaRQ,
+        newRAB.bendaharaRQ,
+        newRAB.ketuaYayasan,
+        newRAB.total,
+        newRAB.itemCount,
+        'Ada',
+        '',
+        newRAB.createdAt,
+      ]);
+      (newRAB.items || []).forEach((item, idx) => {
+        appendRowToSheet(accessToken, cleanId, 'RAB_Items!A:F', [
+          item.id,
+          newRAB.id,
+          idx + 1,
+          item.rincian,
+          item.jumlah,
+          newRAB.createdAt,
+        ]);
+      });
+    }
+
     await loadSharedData(true);
     return newRAB;
   };
@@ -204,14 +345,15 @@ export default function App() {
       <div className="max-w-xl mx-auto w-full">
         {/* Navigation & Header */}
         <Navbar
-          user={null}
-          onLogin={() => {}}
-          onLogout={() => {}}
-          isLoggingIn={false}
+          user={user}
+          onLogin={handleGoogleLogin}
+          onLogout={handleGoogleLogout}
+          isLoggingIn={isLoggingIn}
           onOpenSheetModal={() => setIsSheetModalOpen(true)}
           sheetTitle={sheetTitle}
           isSyncing={isRefreshing}
           onManualSync={() => loadSharedData(false)}
+          spreadsheetId={spreadsheetId}
         />
 
         {/* Desktop / Tablet Tab Switcher (On mobile, uses the bottom nav bar) */}
@@ -326,6 +468,19 @@ export default function App() {
         setSheetTitle={setSheetTitle}
         onNotify={showToast}
         initialWebAppUrl={webAppUrl}
+        user={user}
+        accessToken={accessToken}
+        onLogin={handleGoogleLogin}
+        onLogout={handleGoogleLogout}
+        isLoggingIn={isLoggingIn}
+        spreadsheetId={spreadsheetId}
+        setSpreadsheetId={(id) => {
+          setSpreadsheetId(id);
+          localStorage.setItem(SHEET_ID_KEY, id);
+        }}
+        labList={labList}
+        transaksiList={transaksiList}
+        rabList={rabList}
       />
 
       <ConfirmModal

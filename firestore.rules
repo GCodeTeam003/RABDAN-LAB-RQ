@@ -1,0 +1,63 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Default Deny Catch-All
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidLAB(data) {
+      return data.nomor is string && data.nomor.size() <= 100
+        && data.bulan is string && data.bulan.size() <= 50
+        && data.tahun is number
+        && data.saldoAwal is number;
+    }
+
+    function isValidTransaksi(data) {
+      return data.idLAB is string && data.idLAB.size() <= 100
+        && data.keterangan is string && data.keterangan.size() <= 500
+        && data.tanggal is string && data.tanggal.size() <= 50
+        && data.masuk is number
+        && data.keluar is number;
+    }
+
+    function isValidRAB(data) {
+      return data.nomor is string && data.nomor.size() <= 100
+        && data.bulan is string && data.bulan.size() <= 50
+        && data.tahun is number
+        && data.total is number;
+    }
+
+    // Koleksi LAB (Laporan Anggaran Bulanan)
+    match /lab/{labId} {
+      allow read: if true;
+      allow create, update: if isValidId(labId) && isValidLAB(request.resource.data);
+      allow delete: if isValidId(labId);
+    }
+
+    // Koleksi Transaksi
+    match /transaksi/{transaksiId} {
+      allow read: if true;
+      allow create, update: if isValidId(transaksiId) && isValidTransaksi(request.resource.data);
+      allow delete: if isValidId(transaksiId);
+    }
+
+    // Koleksi RAB (Rencana Anggaran Biaya)
+    match /rab/{rabId} {
+      allow read: if true;
+      allow create, update: if isValidId(rabId) && isValidRAB(request.resource.data);
+      allow delete: if isValidId(rabId);
+    }
+
+    // Koleksi Pengaturan (Settings / Sync Config)
+    match /settings/{settingId} {
+      allow read: if true;
+      allow write: if isValidId(settingId);
+    }
+  }
+}

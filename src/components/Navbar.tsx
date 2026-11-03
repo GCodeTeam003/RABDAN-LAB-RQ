@@ -1,6 +1,6 @@
 import React from 'react';
 import { User } from 'firebase/auth';
-import { FileSpreadsheet, ExternalLink, Database, CheckCircle2, RefreshCw } from 'lucide-react';
+import { RefreshCw, FileSpreadsheet, LogIn, CheckCircle2 } from 'lucide-react';
 
 interface NavbarProps {
   user: User | null;
@@ -11,17 +11,18 @@ interface NavbarProps {
   sheetTitle: string;
   isSyncing: boolean;
   onManualSync: () => void;
+  spreadsheetId?: string;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
   user,
   onLogin,
-  onLogout,
   isLoggingIn,
   onOpenSheetModal,
   sheetTitle,
   isSyncing,
   onManualSync,
+  spreadsheetId,
 }) => {
   return (
     <header className="mb-4 sm:mb-6">
@@ -41,28 +42,49 @@ export const Navbar: React.FC<NavbarProps> = ({
               </span>
             </div>
             <p className="text-[11px] sm:text-xs text-slate-500 truncate">
-              Database Keuangan Terbuka &bull; Sinkronisasi Otomatis
+              Yayasan Misykatul Ummah &bull; Database Keuangan Terbuka
             </p>
           </div>
         </div>
 
-        {/* Sync Status / Quick Sync Button */}
+        {/* Action Buttons */}
         <div className="flex items-center gap-1.5 shrink-0">
+          {!user ? (
+            <button
+              type="button"
+              onClick={onOpenSheetModal}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-bold shadow-2xs transition-colors cursor-pointer"
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
+              <span className="hidden xs:inline">Hubungkan Sheet</span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={onOpenSheetModal}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-emerald-300 bg-emerald-100/70 text-emerald-900 text-xs font-bold shadow-2xs transition-colors cursor-pointer"
+              title={`Terhubung sebagai ${user.email}`}
+            >
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+              <span className="truncate max-w-[100px] sm:max-w-[140px]">{user.displayName || user.email?.split('@')[0]}</span>
+            </button>
+          )}
+
           <button
             type="button"
             onClick={onManualSync}
             disabled={isSyncing}
-            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl border border-emerald-200 bg-emerald-50/80 hover:bg-emerald-100/80 text-emerald-800 text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
-            title="Sinkronkan database sekarang"
+            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
+            title="Muat ulang data dari server"
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
-            <span className="hidden sm:inline">{isSyncing ? 'Menyinkronkan...' : 'Sinkron'}</span>
+            <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin text-emerald-600' : ''}`} />
+            <span className="hidden sm:inline">{isSyncing ? 'Memuat...' : 'Muat Ulang'}</span>
           </button>
         </div>
       </div>
 
-      {/* Persistent Google Spreadsheet Status Bar */}
-      <div className="mt-2.5 flex items-center justify-between text-xs px-3 py-2 rounded-xl bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 border border-emerald-200 shadow-2xs">
+      {/* Dual Database Status Bar (Cloud Firestore + Google Sheets) */}
+      <div className="mt-2.5 flex flex-wrap items-center justify-between gap-1.5 text-xs px-3 py-2 rounded-xl bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 border border-emerald-200 shadow-2xs">
         <div className="flex items-center gap-2 min-w-0">
           <span className="relative flex h-2.5 w-2.5 shrink-0">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
@@ -71,22 +93,32 @@ export const Navbar: React.FC<NavbarProps> = ({
           <button
             type="button"
             onClick={onOpenSheetModal}
-            className="font-bold text-emerald-900 truncate hover:underline text-left cursor-pointer flex items-center gap-1"
+            className="font-bold text-emerald-950 truncate hover:underline text-left cursor-pointer flex items-center gap-1.5"
           >
-            <span>Google Spreadsheet: {sheetTitle || 'Database Keuangan RQ Ulul Azmi (RAB & LAB)'}</span>
+            <span className="text-[11px] sm:text-xs">
+              <span className="text-emerald-700">Database Cloud:</span> Aktif Realtime &bull;{' '}
+              <span className="text-slate-700">{sheetTitle || 'Database Keuangan RQ'}</span>
+            </span>
           </button>
         </div>
 
-        <div className="flex items-center gap-2 shrink-0 ml-2">
-          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-600 text-white">
-            Selalu Aktif
-          </span>
+        <div className="flex items-center gap-2 shrink-0 ml-auto">
+          {spreadsheetId ? (
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-700 text-white flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-200"></span>
+              Sheet Tersambung
+            </span>
+          ) : (
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-600 text-white">
+              Cloud Realtime
+            </span>
+          )}
           <button
             type="button"
             onClick={onOpenSheetModal}
-            className="text-[11px] font-semibold text-emerald-800 hover:text-emerald-950 underline cursor-pointer"
+            className="text-[11px] font-bold text-emerald-800 hover:text-emerald-950 bg-white/80 hover:bg-white px-2 py-0.5 rounded-md border border-emerald-200 cursor-pointer"
           >
-            Pengaturan
+            Kelola Sync
           </button>
         </div>
       </div>

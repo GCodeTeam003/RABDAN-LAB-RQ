@@ -158,9 +158,9 @@ async function syncToGoogleSheetWebhook(action: string, payload: any) {
 
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 6000);
+    const timeout = setTimeout(() => controller.abort(), 8000);
 
-    await fetch(url, {
+    const res = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -168,16 +168,74 @@ async function syncToGoogleSheetWebhook(action: string, payload: any) {
         data: payload,
         timestamp: new Date().toISOString(),
       }),
+      redirect: 'follow',
       signal: controller.signal,
     });
     clearTimeout(timeout);
+    const text = await res.text();
+    if (text.includes('doPost')) {
+      console.warn(`[Sync Webhook] Target Webhook script is missing doPost function!`);
+    } else {
+      console.log(`[Sync Webhook] Successfully sent ${action} to webhook`);
+    }
   } catch (e) {
-    // Non-blocking: background sync failure is logged without failing client request
-    console.warn(`[Sync Webhook] Optional webhook sync (${action}) completed with notice:`, (e as Error).message);
+    console.warn(`[Sync Webhook] Webhook notice (${action}):`, (e as Error).message);
   }
 }
 
 // API Routes
+app.get('/api/test-webhook', async (req: Request, res: Response) => {
+  const db = readDb();
+  const url = (req.query.url as string) || db.sheetConfig?.webAppUrl;
+  if (!url || !url.startsWith('http')) {
+    res.json({ ok: false, message: 'URL Webhook Google Apps Script belum diisi.' });
+    return;
+  }
+
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
+
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'ping', data: { test: true }, timestamp: new Date().toISOString() }),
+      redirect: 'follow',
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+
+    const bodyText = await resp.text();
+    if (bodyText.includes('doPost')) {
+      res.json({
+        ok: false,
+        type: 'missing_dopost',
+        message: 'Google Apps Script yang Anda gunakan tidak memiliki fungsi doPost(). Silakan ganti kodenya di Apps Script spreadsheet Anda dengan script yang telah kami sediakan.',
+      });
+      return;
+    }
+
+    try {
+      const parsed = JSON.parse(bodyText);
+      if (parsed.ok) {
+        res.json({ ok: true, message: 'Webhook Google Apps Script terhubung dengan sempurna dan siap menerima data!' });
+        return;
+      }
+    } catch (_) {}
+
+    res.json({
+      ok: true,
+      message: 'Koneksi ke server Google Apps Script berhasil dijangkau (Status ' + resp.status + ').',
+    });
+  } catch (e: any) {
+    res.json({
+      ok: false,
+      type: 'network_error',
+      message: 'Gagal menghubungi URL Webhook: ' + e.message,
+    });
+  }
+});
+
 app.get('/api/status', (req: Request, res: Response) => {
   const db = readDb();
   res.json({
