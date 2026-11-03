@@ -308,7 +308,7 @@ export default function App() {
 
       {/* Footer info */}
       <footer className="mt-8 text-center text-xs text-slate-400 py-3 hidden sm:block">
-        FIA (Finance Instansi Azmi) &bull; Rumah Qur&apos;an Ulul Azmi &bull; Yayasan Mutiara Ummah (YMU)
+        FIA (Finance Instansi Azmi) &bull; Rumah Qur&apos;an Ulul Azmi &bull; Yayasan Misykatul Ummah (YMU)
       </footer>
 
       {/* Mobile Bottom Navigation Bar */}

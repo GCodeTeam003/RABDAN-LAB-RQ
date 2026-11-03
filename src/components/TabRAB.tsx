@@ -26,7 +26,7 @@ export const TabRAB: React.FC<TabRABProps> = ({
   const [kota, setKota] = useState<string>('Kibang Budi Jaya');
   const [ketuaRQ, setKetuaRQ] = useState<string>('AL MUTAQIN');
   const [bendaharaRQ, setBendaharaRQ] = useState<string>('HAMIDAH FAUZIYAH');
-  const [ketuaYayasan, setKetuaYayasan] = useState<string>('H. AHMAD RIFAI, M.Pd.');
+  const [ketuaYayasan, setKetuaYayasan] = useState<string>('SURYADI');
   const [autoGenPDF, setAutoGenPDF] = useState<boolean>(true);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
@@ -265,7 +265,7 @@ export const TabRAB: React.FC<TabRABProps> = ({
             id="rab-ketuaYayasan"
             value={ketuaYayasan}
             onChange={(e) => setKetuaYayasan(e.target.value)}
-            placeholder="H. AHMAD RIFAI, M.Pd."
+            placeholder="SURYADI"
             required
             className="w-full px-3.5 py-3 rounded-xl border border-slate-300 text-sm sm:text-base bg-white focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
           />
