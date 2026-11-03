@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback } from 'react';
-import { User } from 'firebase/auth';
 import { Navbar } from './components/Navbar';
 import { BottomNav } from './components/BottomNav';
 import { TabTransaksi } from './components/TabTransaksi';
@@ -10,27 +9,25 @@ import { SheetConfigModal } from './components/SheetConfigModal';
 import { ConfirmModal } from './components/ConfirmModal';
 import { LABRecord, RABRecord, TransaksiRecord } from './types';
 import {
-  getLocalData,
+  fetchSharedData,
   persistLAB,
   persistRAB,
   persistTransaksi,
   deleteLocalTransaksi,
   deleteLocalLAB,
   deleteLocalRAB,
-  syncFromGoogleSheets,
 } from './services/storage';
-import { initAuth, googleSignIn, logout, getAccessToken } from './services/auth';
-import { SHEET_ID_KEY, checkSpreadsheetExists, createDatabaseSpreadsheet, DEFAULT_SHEET_TITLE } from './services/sheets';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<'transaksi' | 'lab' | 'rab' | 'riwayat'>('transaksi');
-  const [user, setUser] = useState<User | null>(null);
-  const [isLoggingIn, setIsLoggingIn] = useState<boolean>(false);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
-  const [sheetTitle, setSheetTitle] = useState<string>('Database Google Sheets');
+  const [sheetTitle, setSheetTitle] = useState<string>('Database Keuangan RQ Ulul Azmi (RAB & LAB)');
+  const [webAppUrl, setWebAppUrl] = useState<string>(
+    'https://script.google.com/macros/s/AKfycby_qu393Ks92Sqp6NhkObIjiuTmQo4nDcCOPCc7uTOh2y4ikulZVA2dopXk9Ve0nYZo/exec'
+  );
   const [isSheetModalOpen, setIsSheetModalOpen] = useState<boolean>(false);
 
-  // App Data
+  // Shared Multi-user App Data
   const [labList, setLabList] = useState<LABRecord[]>([]);
   const [rabList, setRabList] = useState<RABRecord[]>([]);
   const [transaksiList, setTransaksiList] = useState<TransaksiRecord[]>([]);
@@ -62,99 +59,45 @@ export default function App() {
     }, 4500);
   }, []);
 
-  // Load initial local data
-  const loadLocalSnapshot = useCallback(() => {
-    const data = getLocalData();
-    setLabList(data.labList);
-    setRabList(data.rabList);
-    setTransaksiList(data.transaksiList);
-  }, []);
-
-  // Sync with Google Sheets if token & spreadsheet are available
-  const handleSyncData = useCallback(async () => {
-    setIsRefreshing(true);
+  // Fetch shared database data from central server
+  const loadSharedData = useCallback(async (silent = false) => {
+    if (!silent) setIsRefreshing(true);
     try {
-      const token = await getAccessToken();
-      const currentSheetId = localStorage.getItem(SHEET_ID_KEY);
-
-      if (token && currentSheetId) {
-        const synced = await syncFromGoogleSheets();
-        setLabList(synced.labList);
-        setRabList(synced.rabList);
-        setTransaksiList(synced.transaksiList);
-        showToast('Sinkronisasi Google Sheets berhasil!', 'success');
-      } else {
-        loadLocalSnapshot();
+      const data = await fetchSharedData();
+      if (data) {
+        setLabList(data.labList);
+        setRabList(data.rabList);
+        setTransaksiList(data.transaksiList);
+        if (data.sheetConfig) {
+          if (data.sheetConfig.spreadsheetName) {
+            setSheetTitle(data.sheetConfig.spreadsheetName);
+          }
+          if (data.sheetConfig.webAppUrl) {
+            setWebAppUrl(data.sheetConfig.webAppUrl);
+          }
+        }
       }
     } catch (e: any) {
-      console.warn('Sync failed, using local mirror:', e);
-      loadLocalSnapshot();
-      showToast('Gagal memuat Google Sheet, menggunakan data lokal: ' + (e.message || ''), 'error');
+      console.warn('Failed to load shared data:', e);
+      if (!silent) {
+        showToast('Gagal memuat data terbaru dari server: ' + (e.message || ''), 'error');
+      }
     } finally {
-      setIsRefreshing(false);
+      if (!silent) setIsRefreshing(false);
     }
-  }, [loadLocalSnapshot, showToast]);
+  }, [showToast]);
 
-  // Initialize auth and listeners
+  // Initial load and real-time auto-sync polling (every 6 seconds)
   useEffect(() => {
-    loadLocalSnapshot();
+    loadSharedData();
 
-    const unsubscribe = initAuth(
-      async (authUser, token) => {
-        setUser(authUser);
-        const currentSheetId = localStorage.getItem(SHEET_ID_KEY);
-        if (currentSheetId) {
-          const check = await checkSpreadsheetExists(token, currentSheetId);
-          if (check.exists && check.title) {
-            setSheetTitle(check.title);
-          }
-        }
-        // Run sync
-        handleSyncData();
-      },
-      () => {
-        setUser(null);
-      }
-    );
+    // Auto-sync interval so multiple users see updates simultaneously
+    const interval = setInterval(() => {
+      loadSharedData(true);
+    }, 6000);
 
-    return () => unsubscribe();
-  }, [handleSyncData, loadLocalSnapshot]);
-
-  const handleLogin = async () => {
-    setIsLoggingIn(true);
-    try {
-      const res = await googleSignIn();
-      if (res) {
-        setUser(res.user);
-        showToast(`Selamat datang, ${res.user.displayName || res.user.email}!`, 'success');
-
-        // Check if user has an existing sheet, otherwise automatically create or prompt
-        const currentSheetId = localStorage.getItem(SHEET_ID_KEY);
-        if (!currentSheetId) {
-          showToast('Menyiapkan Google Sheets database untuk Anda...', 'info');
-          try {
-            const meta = await createDatabaseSpreadsheet(res.accessToken, DEFAULT_SHEET_TITLE);
-            setSheetTitle(meta.name);
-            showToast('Google Sheet database berhasil dibuat di Google Drive Anda!', 'success');
-          } catch (createErr: any) {
-            console.error('Auto create sheet error:', createErr);
-          }
-        }
-        await handleSyncData();
-      }
-    } catch (err: any) {
-      console.error('Login error:', err);
-      showToast('Gagal masuk dengan Google: ' + (err.message || 'Error'), 'error');
-    } finally {
-      setIsLoggingIn(false);
-    }
-  };
-
-  const handleLogout = async () => {
-    await logout();
-    setUser(null);
-    showToast('Berhasil keluar dari akun Google', 'info');
-  };
+    return () => clearInterval(interval);
+  }, [loadSharedData]);
 
   // Handlers for creating records
   const handleSubmitTransaksi = async (data: {
@@ -175,7 +118,7 @@ export default function App() {
     };
 
     const res = await persistTransaksi(newTrx);
-    loadLocalSnapshot();
+    await loadSharedData(true);
     return { idLAB: data.idLAB, updatedLAB: res.updatedLAB };
   };
 
@@ -194,7 +137,7 @@ export default function App() {
     };
 
     await persistLAB(newLAB);
-    loadLocalSnapshot();
+    await loadSharedData(true);
     return newLAB;
   };
 
@@ -209,7 +152,7 @@ export default function App() {
     };
 
     await persistRAB(newRAB);
-    loadLocalSnapshot();
+    await loadSharedData(true);
     return newRAB;
   };
 
@@ -218,12 +161,12 @@ export default function App() {
     setConfirmModal({
       isOpen: true,
       title: 'Hapus Catatan Transaksi?',
-      message: `Apakah Anda yakin ingin menghapus transaksi "${trx.keterangan}" sebesar ${trx.masuk > 0 ? 'Rp ' + trx.masuk.toLocaleString('id-ID') : 'Rp ' + trx.keluar.toLocaleString('id-ID')}? Tindakan ini akan memperbarui saldo kas.`,
+      message: `Apakah Anda yakin ingin menghapus transaksi "${trx.keterangan}" sebesar ${trx.masuk > 0 ? 'Rp ' + trx.masuk.toLocaleString('id-ID') : 'Rp ' + trx.keluar.toLocaleString('id-ID')}? Tindakan ini akan memperbarui saldo kas untuk semua pengguna.`,
       onConfirm: async () => {
         await deleteLocalTransaksi(trx.id);
-        loadLocalSnapshot();
+        await loadSharedData(true);
         setConfirmModal((prev) => ({ ...prev, isOpen: false }));
-        showToast('Transaksi berhasil dihapus', 'success');
+        showToast('Transaksi berhasil dihapus dari database', 'success');
       },
     });
   };
@@ -232,12 +175,12 @@ export default function App() {
     setConfirmModal({
       isOpen: true,
       title: 'Hapus Laporan Anggaran Bulanan (LAB)?',
-      message: `Hapus LAB periode ${lab.bulan} ${lab.tahun} (${lab.nomor}) beserta seluruh transaksi yang terkait?`,
+      message: `Hapus LAB periode ${lab.bulan} ${lab.tahun} (${lab.nomor}) beserta seluruh transaksi yang terkait untuk semua pengguna?`,
       onConfirm: async () => {
         await deleteLocalLAB(lab.id);
-        loadLocalSnapshot();
+        await loadSharedData(true);
         setConfirmModal((prev) => ({ ...prev, isOpen: false }));
-        showToast('LAB berhasil dihapus', 'success');
+        showToast('LAB berhasil dihapus dari database', 'success');
       },
     });
   };
@@ -246,12 +189,12 @@ export default function App() {
     setConfirmModal({
       isOpen: true,
       title: 'Hapus Rencana Anggaran Biaya (RAB)?',
-      message: `Hapus RAB periode ${rab.bulan} ${rab.tahun} (${rab.nomor}) dengan total anggaran Rp ${rab.total.toLocaleString('id-ID')}?`,
+      message: `Hapus RAB periode ${rab.bulan} ${rab.tahun} (${rab.nomor}) dengan total anggaran Rp ${rab.total.toLocaleString('id-ID')} untuk semua pengguna?`,
       onConfirm: async () => {
         await deleteLocalRAB(rab.id);
-        loadLocalSnapshot();
+        await loadSharedData(true);
         setConfirmModal((prev) => ({ ...prev, isOpen: false }));
-        showToast('RAB berhasil dihapus', 'success');
+        showToast('RAB berhasil dihapus dari database', 'success');
       },
     });
   };
@@ -261,12 +204,14 @@ export default function App() {
       <div className="max-w-xl mx-auto w-full">
         {/* Navigation & Header */}
         <Navbar
-          user={user}
-          onLogin={handleLogin}
-          onLogout={handleLogout}
-          isLoggingIn={isLoggingIn}
+          user={null}
+          onLogin={() => {}}
+          onLogout={() => {}}
+          isLoggingIn={false}
           onOpenSheetModal={() => setIsSheetModalOpen(true)}
           sheetTitle={sheetTitle}
+          isSyncing={isRefreshing}
+          onManualSync={() => loadSharedData(false)}
         />
 
         {/* Desktop / Tablet Tab Switcher (On mobile, uses the bottom nav bar) */}
@@ -274,7 +219,7 @@ export default function App() {
           <button
             type="button"
             onClick={() => setActiveTab('transaksi')}
-            className={`flex-1 py-2.5 px-2 text-xs sm:text-sm font-bold rounded-xl transition-all ${
+            className={`flex-1 py-2.5 px-2 text-xs sm:text-sm font-bold rounded-xl transition-all cursor-pointer ${
               activeTab === 'transaksi'
                 ? 'bg-emerald-600 text-white shadow-xs'
                 : 'text-slate-600 hover:text-slate-900'
@@ -285,7 +230,7 @@ export default function App() {
           <button
             type="button"
             onClick={() => setActiveTab('lab')}
-            className={`flex-1 py-2.5 px-2 text-xs sm:text-sm font-bold rounded-xl transition-all ${
+            className={`flex-1 py-2.5 px-2 text-xs sm:text-sm font-bold rounded-xl transition-all cursor-pointer ${
               activeTab === 'lab'
                 ? 'bg-emerald-600 text-white shadow-xs'
                 : 'text-slate-600 hover:text-slate-900'
@@ -296,7 +241,7 @@ export default function App() {
           <button
             type="button"
             onClick={() => setActiveTab('rab')}
-            className={`flex-1 py-2.5 px-2 text-xs sm:text-sm font-bold rounded-xl transition-all ${
+            className={`flex-1 py-2.5 px-2 text-xs sm:text-sm font-bold rounded-xl transition-all cursor-pointer ${
               activeTab === 'rab'
                 ? 'bg-emerald-600 text-white shadow-xs'
                 : 'text-slate-600 hover:text-slate-900'
@@ -307,7 +252,7 @@ export default function App() {
           <button
             type="button"
             onClick={() => setActiveTab('riwayat')}
-            className={`flex-1 py-2.5 px-2 text-xs sm:text-sm font-bold rounded-xl transition-all ${
+            className={`flex-1 py-2.5 px-2 text-xs sm:text-sm font-bold rounded-xl transition-all cursor-pointer ${
               activeTab === 'riwayat'
                 ? 'bg-emerald-600 text-white shadow-xs'
                 : 'text-slate-600 hover:text-slate-900'
@@ -351,7 +296,7 @@ export default function App() {
               labList={labList}
               rabList={rabList}
               transaksiList={transaksiList}
-              onRefresh={handleSyncData}
+              onRefresh={() => loadSharedData(false)}
               isRefreshing={isRefreshing}
               onNotify={showToast}
               onRequestDeleteLAB={handleRequestDeleteLAB}
@@ -376,10 +321,11 @@ export default function App() {
       <SheetConfigModal
         isOpen={isSheetModalOpen}
         onClose={() => setIsSheetModalOpen(false)}
-        onSync={handleSyncData}
+        onSync={() => loadSharedData(false)}
         sheetTitle={sheetTitle}
         setSheetTitle={setSheetTitle}
         onNotify={showToast}
+        initialWebAppUrl={webAppUrl}
       />
 
       <ConfirmModal
@@ -394,7 +340,7 @@ export default function App() {
       {toast.show && (
         <div
           role="status"
-          className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-xl text-xs sm:text-sm font-semibold text-white shadow-xl transition-all max-w-[90vw] text-center ${
+          className={`fixed bottom-20 sm:bottom-6 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-xl text-xs sm:text-sm font-semibold text-white shadow-xl transition-all max-w-[90vw] text-center ${
             toast.type === 'success'
               ? 'bg-emerald-600 shadow-emerald-900/20'
               : toast.type === 'error'

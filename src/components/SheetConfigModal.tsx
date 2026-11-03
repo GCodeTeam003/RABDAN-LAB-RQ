@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
-import { FileSpreadsheet, PlusCircle, RefreshCw, X, ExternalLink, Check, Copy } from 'lucide-react';
-import { SHEET_ID_KEY, DEFAULT_SHEET_TITLE, createDatabaseSpreadsheet } from '../services/sheets';
-import { getAccessToken } from '../services/auth';
+import { FileSpreadsheet, X, Check, Copy, RefreshCw, Zap, ShieldCheck, Code2 } from 'lucide-react';
+import { updateSheetConfig } from '../services/storage';
 
 interface SheetConfigModalProps {
   isOpen: boolean;
@@ -10,6 +9,7 @@ interface SheetConfigModalProps {
   sheetTitle: string;
   setSheetTitle: (title: string) => void;
   onNotify: (msg: string, type?: 'success' | 'error') => void;
+  initialWebAppUrl?: string;
 }
 
 export const SheetConfigModal: React.FC<SheetConfigModalProps> = ({
@@ -19,52 +19,62 @@ export const SheetConfigModal: React.FC<SheetConfigModalProps> = ({
   sheetTitle,
   setSheetTitle,
   onNotify,
+  initialWebAppUrl = 'https://script.google.com/macros/s/AKfycby_qu393Ks92Sqp6NhkObIjiuTmQo4nDcCOPCc7uTOh2y4ikulZVA2dopXk9Ve0nYZo/exec',
 }) => {
-  const [sheetInput, setSheetInput] = useState('');
-  const [isCreating, setIsCreating] = useState(false);
+  const [webAppUrl, setWebAppUrl] = useState(initialWebAppUrl);
+  const [spreadsheetName, setSpreadsheetName] = useState(sheetTitle || 'Database Keuangan RQ Ulul Azmi (RAB & LAB)');
+  const [isSaving, setIsSaving] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const [copiedCode, setCopiedCode] = useState(false);
+  const [showCode, setShowCode] = useState(false);
 
   if (!isOpen) return null;
 
-  const currentSheetId = typeof window !== 'undefined' ? localStorage.getItem(SHEET_ID_KEY) : '';
+  const sampleAppsScriptCode = `// KODE GOOGLE APPS SCRIPT UNTUK DATABASE FIA
+// 1. Buka Google Sheet -> Ekstensi -> Apps Script
+// 2. Tempel kode ini -> Simpan
+// 3. Klik Terapkan (Deploy) -> Penerapan Baru (New Deployment) -> Jenis: Aplikasi Web (Web App)
+// 4. Akses: Siapa Saja (Anyone) -> Terapkan -> Salin URL Aplikasi Web
 
-  const handleSaveSheetId = (e: React.FormEvent) => {
+function doPost(e) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var payload = JSON.parse(e.postData.contents);
+    var action = payload.action;
+    var data = payload.data;
+    
+    if (action === "submitTransaksi") {
+      var sheet = ss.getSheetByName("Transaksi") || ss.insertSheet("Transaksi");
+      sheet.appendRow([data.id, data.idLAB, data.tanggal, data.keterangan, data.masuk, data.keluar, new Date()]);
+    } else if (action === "submitLAB") {
+      var sheet = ss.getSheetByName("LAB_Master") || ss.insertSheet("LAB_Master");
+      sheet.appendRow([data.id, data.nomor, data.bulan, data.tahun, data.tanggal, data.kota, data.ketuaRQ, data.bendaharaRQ, data.saldoAwal, data.totalMasuk, data.totalKeluar, data.saldoAkhir, data.trxCount, "Ada", "", new Date()]);
+    } else if (action === "submitRAB") {
+      var sheet = ss.getSheetByName("RAB_Master") || ss.insertSheet("RAB_Master");
+      sheet.appendRow([data.id, data.nomor, data.bulan, data.tahun, data.tanggal, data.kota, data.ketuaRQ, data.bendaharaRQ, data.ketuaYayasan, data.total, data.itemCount, "Ada", "", new Date()]);
+    }
+    
+    return ContentService.createTextOutput(JSON.stringify({ ok: true })).setMimeType(ContentService.MimeType.JSON);
+  } catch (err) {
+    return ContentService.createTextOutput(JSON.stringify({ ok: false, error: err.message })).setMimeType(ContentService.MimeType.JSON);
+  }
+}`;
+
+  const handleSaveConfig = async (e: React.FormEvent) => {
     e.preventDefault();
-    let val = sheetInput.trim();
-    if (!val) {
-      onNotify('Masukkan ID atau URL Google Sheet', 'error');
-      return;
-    }
-    // Extract ID if a full URL was pasted
-    const match = val.match(/\/d\/([a-zA-Z0-9-_]+)/);
-    if (match) {
-      val = match[1];
-    }
-    localStorage.setItem(SHEET_ID_KEY, val);
-    setSheetTitle('Google Sheet Terhubung');
-    onNotify('ID Google Sheet berhasil disimpan!', 'success');
-    setSheetInput('');
-    onSync();
-  };
-
-  const handleCreateNewSheet = async () => {
-    setIsCreating(true);
+    setIsSaving(true);
     try {
-      const token = await getAccessToken();
-      if (!token) {
-        onNotify('Harap klik "Tautkan Google" terlebih dahulu untuk membuat Spreadsheet di Google Drive Anda.', 'error');
-        setIsCreating(false);
-        return;
-      }
-      const meta = await createDatabaseSpreadsheet(token, DEFAULT_SHEET_TITLE);
-      setSheetTitle(meta.name);
-      onNotify('Google Sheet berhasil dibuat & ditautkan sebagai database!', 'success');
+      await updateSheetConfig({
+        spreadsheetName,
+        webAppUrl: webAppUrl.trim(),
+      });
+      setSheetTitle(spreadsheetName);
+      onNotify('Pengaturan Google Spreadsheet tersimpan!', 'success');
       await onSync();
     } catch (err: any) {
-      onNotify('Gagal membuat Google Sheet: ' + (err.message || 'Periksa koneksi'), 'error');
+      onNotify('Gagal menyimpan: ' + err.message, 'error');
     } finally {
-      setIsCreating(false);
+      setIsSaving(false);
     }
   };
 
@@ -72,29 +82,32 @@ export const SheetConfigModal: React.FC<SheetConfigModalProps> = ({
     setIsSyncing(true);
     try {
       await onSync();
-      onNotify('Berhasil menyinkronkan data dengan Google Sheets!', 'success');
+      onNotify('Data berhasil disinkronkan dengan server database & spreadsheet!', 'success');
     } catch (err: any) {
-      onNotify('Gagal sinkronisasi: ' + (err.message || 'Periksa izin Google Sheets'), 'error');
+      onNotify('Gagal sinkron: ' + err.message, 'error');
     } finally {
       setIsSyncing(false);
     }
   };
 
-  const copySheetId = () => {
-    if (currentSheetId) {
-      navigator.clipboard.writeText(currentSheetId);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    }
+  const copyScript = () => {
+    navigator.clipboard.writeText(sampleAppsScriptCode);
+    setCopiedCode(true);
+    setTimeout(() => setCopiedCode(false), 2000);
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-100">
+    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
+      <div className="bg-white rounded-3xl max-w-lg w-full p-5 sm:p-6 shadow-2xl border border-slate-100 max-h-[92vh] overflow-y-auto">
         <div className="flex items-center justify-between pb-3 border-b border-slate-100">
           <div className="flex items-center gap-2 text-slate-800">
-            <FileSpreadsheet className="w-5 h-5 text-emerald-600" />
-            <h3 className="text-base font-bold">Koneksi Google Sheets</h3>
+            <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold">
+              <FileSpreadsheet className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-sm sm:text-base font-bold">Koneksi Google Spreadsheet</h3>
+              <p className="text-[11px] text-slate-500">Mode Terbuka Otomatis Tanpa Login</p>
+            </div>
           </div>
           <button
             type="button"
@@ -106,111 +119,109 @@ export const SheetConfigModal: React.FC<SheetConfigModalProps> = ({
         </div>
 
         <div className="py-4 space-y-4 text-xs sm:text-sm text-slate-600">
-          {/* Current Status */}
-          <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
-            <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-              Status Spreadsheet Aktif
+          {/* Always Connected Status Card */}
+          <div className="p-3.5 rounded-2xl bg-gradient-to-br from-emerald-50 to-teal-50/50 border border-emerald-200 space-y-2">
+            <div className="flex items-center gap-2 text-emerald-800 font-bold text-xs uppercase tracking-wider">
+              <Zap className="w-4 h-4 text-emerald-600" />
+              <span>Koneksi Server Terbuka Aktif</span>
             </div>
-            {currentSheetId ? (
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <span className="font-medium text-slate-800 truncate pr-2">
-                    {sheetTitle || 'Database Keuangan RQ Ulul Azmi'}
-                  </span>
-                  <a
-                    href={`https://docs.google.com/spreadsheets/d/${currentSheetId}/edit`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-emerald-600 font-semibold hover:underline shrink-0"
-                  >
-                    Buka File <ExternalLink className="w-3.5 h-3.5" />
-                  </a>
-                </div>
-                <div className="flex items-center gap-2">
-                  <code className="text-[11px] bg-white px-2 py-1 rounded border border-slate-200 text-slate-600 truncate flex-1 font-mono">
-                    {currentSheetId}
-                  </code>
-                  <button
-                    type="button"
-                    onClick={copySheetId}
-                    className="p-1 rounded bg-white hover:bg-slate-100 border border-slate-200 text-slate-600"
-                    title="Salin ID"
-                  >
-                    {copied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <p className="text-slate-500 italic">
-                Belum ada Google Sheet yang ditautkan. Data saat ini tersimpan di penyimpanan lokal dan siap disinkronkan.
-              </p>
-            )}
-          </div>
-
-          {/* Quick Create Button */}
-          <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 space-y-2">
-            <div className="font-semibold text-emerald-900 text-sm">
-              Buat Spreadsheet Database Otomatis
-            </div>
-            <p className="text-xs text-emerald-700 leading-relaxed">
-              Sistem akan membuat Google Spreadsheet di Google Drive Anda dengan 4 lembar kerja (LAB_Master, Transaksi, RAB_Master, RAB_Items) dan header tabel otomatis.
+            <p className="text-xs text-emerald-900 leading-relaxed">
+              Aplikasi ini telah terhubung ke database terpusat yang selalu tersinkronisasi. <strong>Semua orang dapat membuka, menambah transaksi, dan membuat dokumen secara bersamaan tanpa perlu login akun Google pribadi.</strong>
             </p>
-            <button
-              type="button"
-              onClick={handleCreateNewSheet}
-              disabled={isCreating}
-              className="mt-1 w-full inline-flex items-center justify-center gap-2 py-2 px-3 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg shadow-xs transition-colors disabled:opacity-50 text-xs sm:text-sm"
-            >
-              <PlusCircle className="w-4 h-4" />
-              <span>{isCreating ? 'Sedang Membuat di Google Drive...' : 'Buat Google Sheet Otomatis'}</span>
-            </button>
+            <div className="pt-1 flex items-center gap-2 text-[11px] font-semibold text-emerald-800">
+              <ShieldCheck className="w-4 h-4 text-emerald-600" />
+              <span>Multi-user real-time sync aktif untuk semua perangkat</span>
+            </div>
           </div>
 
-          {/* Link Existing Sheet */}
-          <form onSubmit={handleSaveSheetId} className="space-y-2 pt-1">
-            <label className="block text-xs font-semibold text-slate-700">
-              Atau Tautkan ID / URL Google Sheet yang Sudah Ada
-            </label>
-            <div className="flex gap-2">
+          {/* Form Settings */}
+          <form onSubmit={handleSaveConfig} className="space-y-3">
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-slate-700">Nama Spreadsheet Database</label>
               <input
                 type="text"
-                value={sheetInput}
-                onChange={(e) => setSheetInput(e.target.value)}
-                placeholder="https://docs.google.com/spreadsheets/d/..."
-                className="flex-1 px-3 py-2 text-xs sm:text-sm rounded-lg border border-slate-300 focus:outline-none focus:border-emerald-500"
+                value={spreadsheetName}
+                onChange={(e) => setSpreadsheetName(e.target.value)}
+                required
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm bg-white focus:outline-none focus:border-emerald-500 font-medium"
               />
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-slate-700">
+                Google Apps Script Web App / Webhook URL
+              </label>
+              <input
+                type="url"
+                value={webAppUrl}
+                onChange={(e) => setWebAppUrl(e.target.value)}
+                placeholder="https://script.google.com/macros/s/.../exec"
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs font-mono bg-white focus:outline-none focus:border-emerald-500"
+              />
+              <p className="text-[11px] text-slate-400">
+                URL Google Apps Script dari spreadsheet Anda yang memungkinkan data otomatis terkirim ke spreadsheet tanpa perlu login.
+              </p>
+            </div>
+
+            <div className="flex gap-2 pt-1">
               <button
                 type="submit"
-                className="px-3 py-2 bg-slate-800 hover:bg-slate-900 text-white font-medium rounded-lg text-xs sm:text-sm transition-colors shrink-0"
+                disabled={isSaving}
+                className="flex-1 py-2.5 px-3 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl text-xs sm:text-sm shadow-xs transition-colors disabled:opacity-50"
               >
-                Simpan
+                {isSaving ? 'Menyimpan...' : 'Simpan Pengaturan'}
               </button>
-            </div>
-          </form>
-
-          {/* Manual Sync Button */}
-          {currentSheetId && (
-            <div className="pt-2">
               <button
                 type="button"
                 onClick={handleManualSync}
                 disabled={isSyncing}
-                className="w-full inline-flex items-center justify-center gap-2 py-2 px-3 border border-slate-300 hover:bg-slate-50 text-slate-700 font-medium rounded-lg text-xs sm:text-sm transition-colors disabled:opacity-50"
+                className="py-2.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl text-xs sm:text-sm transition-colors flex items-center gap-1.5"
               >
                 <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
-                <span>{isSyncing ? 'Sedang Menyinkronkan...' : 'Sinkronkan Data Sekarang'}</span>
+                <span>{isSyncing ? 'Sync...' : 'Sinkronkan'}</span>
               </button>
             </div>
-          )}
+          </form>
+
+          {/* Toggle Script Helper */}
+          <div className="pt-2 border-t border-slate-100">
+            <button
+              type="button"
+              onClick={() => setShowCode(!showCode)}
+              className="text-xs font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1"
+            >
+              <Code2 className="w-3.5 h-3.5" />
+              <span>{showCode ? 'Tutup Petunjuk Script Google Sheet' : 'Lihat / Salin Script Webhook Google Sheet'}</span>
+            </button>
+
+            {showCode && (
+              <div className="mt-2.5 p-3 rounded-xl bg-slate-900 text-slate-100 font-mono text-[11px] space-y-2 relative">
+                <div className="flex justify-between items-center text-slate-400 pb-1 border-b border-slate-800">
+                  <span>Google Apps Script</span>
+                  <button
+                    type="button"
+                    onClick={copyScript}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-[10px]"
+                  >
+                    {copiedCode ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                    <span>{copiedCode ? 'Tersalin' : 'Salin Script'}</span>
+                  </button>
+                </div>
+                <pre className="overflow-x-auto whitespace-pre max-h-48 text-[10px] leading-relaxed">
+                  {sampleAppsScriptCode}
+                </pre>
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="pt-3 border-t border-slate-100 flex justify-end">
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium rounded-lg text-xs sm:text-sm transition-colors"
+            className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl text-xs sm:text-sm transition-colors"
           >
-            Tutup
+            Selesai
           </button>
         </div>
       </div>

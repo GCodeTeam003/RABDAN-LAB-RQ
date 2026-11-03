@@ -1,0 +1,122 @@
+{
+  "sheetConfig": {
+    "spreadsheetName": "Database Keuangan RQ Ulul Azmi (RAB & LAB)",
+    "spreadsheetId": "",
+    "webAppUrl": "https://script.google.com/macros/s/AKfycby_qu393Ks92Sqp6NhkObIjiuTmQo4nDcCOPCc7uTOh2y4ikulZVA2dopXk9Ve0nYZo/exec",
+    "lastSyncedAt": "2026-11-03T15:35:35.487Z",
+    "autoSync": true
+  },
+  "labList": [
+    {
+      "id": "lab-2026-11",
+      "nomor": "001/YMU/RQ/XI/2026",
+      "bulan": "November",
+      "tahun": 2026,
+      "tanggal": "2026-11-01",
+      "kota": "Kibang Budi Jaya",
+      "ketuaRQ": "AL MUTAQIN",
+      "bendaharaRQ": "HAMIDAH FAUZIYAH",
+      "saldoAwal": 5000000,
+      "totalMasuk": 4600000,
+      "totalKeluar": 1850000,
+      "saldoAkhir": 7750000,
+      "trxCount": 4,
+      "hasLink": true,
+      "createdAt": "2026-11-01T07:00:00.000Z"
+    },
+    {
+      "id": "lab-2026-10",
+      "nomor": "012/YMU/RQ/X/2026",
+      "bulan": "Oktober",
+      "tahun": 2026,
+      "tanggal": "2026-10-01",
+      "kota": "Kibang Budi Jaya",
+      "ketuaRQ": "AL MUTAQIN",
+      "bendaharaRQ": "HAMIDAH FAUZIYAH",
+      "saldoAwal": 4200000,
+      "totalMasuk": 4500000,
+      "totalKeluar": 3700000,
+      "saldoAkhir": 5000000,
+      "trxCount": 4,
+      "hasLink": true,
+      "createdAt": "2026-10-01T07:00:00.000Z"
+    }
+  ],
+  "transaksiList": [
+    {
+      "id": "trx-1793720135464",
+      "idLAB": "lab-2026-11",
+      "tanggal": "2026-11-03",
+      "keterangan": "Donasi Wakaf Meja Quran",
+      "masuk": 850000,
+      "keluar": 0,
+      "createdAt": "2026-11-03T15:35:35.464Z"
+    },
+    {
+      "id": "trx-101",
+      "idLAB": "lab-2026-11",
+      "tanggal": "2026-11-02",
+      "keterangan": "Infaq Rutin Donatur Tetap",
+      "masuk": 2500000,
+      "keluar": 0,
+      "createdAt": "2026-11-02T08:00:00.000Z"
+    },
+    {
+      "id": "trx-102",
+      "idLAB": "lab-2026-11",
+      "tanggal": "2026-11-05",
+      "keterangan": "Belanja Konsumsi & Sembako Santri",
+      "masuk": 0,
+      "keluar": 1850000,
+      "createdAt": "2026-11-05T10:30:00.000Z"
+    },
+    {
+      "id": "trx-103",
+      "idLAB": "lab-2026-11",
+      "tanggal": "2026-11-08",
+      "keterangan": "Sedekah Pembelian Kitab & Iqro",
+      "masuk": 1250000,
+      "keluar": 0,
+      "createdAt": "2026-11-08T14:15:00.000Z"
+    }
+  ],
+  "rabList": [
+    {
+      "id": "rab-2026-11",
+      "nomor": "001/YMU/RQ/XI/2026",
+      "bulan": "November",
+      "tahun": 2026,
+      "tanggal": "2026-11-01",
+      "kota": "Kibang Budi Jaya",
+      "ketuaRQ": "AL MUTAQIN",
+      "bendaharaRQ": "HAMIDAH FAUZIYAH",
+      "ketuaYayasan": "H. AHMAD RIFAI, M.Pd.",
+      "total": 8750000,
+      "itemCount": 4,
+      "items": [
+        {
+          "id": "i-1",
+          "rincian": "Bisyafahah & Honor Pengajar Al-Quran",
+          "jumlah": 4500000
+        },
+        {
+          "id": "i-2",
+          "rincian": "Operasional Listrik, Air & Kebersihan RQ",
+          "jumlah": 750000
+        },
+        {
+          "id": "i-3",
+          "rincian": "Konsumsi Bulanan & Snack Pengajian Santri",
+          "jumlah": 2500000
+        },
+        {
+          "id": "i-4",
+          "rincian": "Pengadaan Modul Hafalan & Tajwid",
+          "jumlah": 1000000
+        }
+      ],
+      "hasLink": true,
+      "createdAt": "2026-11-01T07:00:00.000Z"
+    }
+  ]
+}

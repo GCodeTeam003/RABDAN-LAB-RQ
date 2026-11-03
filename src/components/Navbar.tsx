@@ -1,7 +1,6 @@
 import React from 'react';
 import { User } from 'firebase/auth';
-import { FileSpreadsheet, LogOut, ExternalLink, Database, Sparkles } from 'lucide-react';
-import { SHEET_ID_KEY } from '../services/sheets';
+import { FileSpreadsheet, ExternalLink, Database, CheckCircle2, RefreshCw } from 'lucide-react';
 
 interface NavbarProps {
   user: User | null;
@@ -10,6 +9,8 @@ interface NavbarProps {
   isLoggingIn: boolean;
   onOpenSheetModal: () => void;
   sheetTitle: string;
+  isSyncing: boolean;
+  onManualSync: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -19,9 +20,9 @@ export const Navbar: React.FC<NavbarProps> = ({
   isLoggingIn,
   onOpenSheetModal,
   sheetTitle,
+  isSyncing,
+  onManualSync,
 }) => {
-  const currentSheetId = typeof window !== 'undefined' ? localStorage.getItem(SHEET_ID_KEY) : null;
-
   return (
     <header className="mb-4 sm:mb-6">
       {/* Brand Header */}
@@ -40,100 +41,54 @@ export const Navbar: React.FC<NavbarProps> = ({
               </span>
             </div>
             <p className="text-[11px] sm:text-xs text-slate-500 truncate">
-              Manajemen RAB, LAB & Kas Pesantren
+              Database Keuangan Terbuka &bull; Sinkronisasi Otomatis
             </p>
           </div>
         </div>
 
-        {/* User / Google Sign-in */}
+        {/* Sync Status / Quick Sync Button */}
         <div className="flex items-center gap-1.5 shrink-0">
-          {user ? (
-            <div className="flex items-center gap-1.5">
-              <div className="flex items-center gap-1 bg-slate-100 border border-slate-200 px-2 py-1 rounded-lg text-xs">
-                {user.photoURL ? (
-                  <img
-                    src={user.photoURL}
-                    alt={user.displayName || 'User'}
-                    className="w-5 h-5 rounded-full"
-                  />
-                ) : (
-                  <div className="w-5 h-5 rounded-full bg-emerald-600 text-white flex items-center justify-center font-bold text-[10px]">
-                    {user.email ? user.email.charAt(0).toUpperCase() : 'U'}
-                  </div>
-                )}
-                <span className="max-w-[80px] sm:max-w-[120px] truncate font-medium text-slate-700 text-[11px]">
-                  {user.displayName || user.email?.split('@')[0]}
-                </span>
-              </div>
-              <button
-                type="button"
-                onClick={onLogout}
-                className="p-1.5 text-rose-600 hover:bg-rose-50 border border-rose-200 rounded-lg transition-colors"
-                title="Keluar"
-                aria-label="Keluar akun"
-              >
-                <LogOut className="w-4 h-4" />
-              </button>
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={onLogin}
-              disabled={isLoggingIn}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-300 rounded-xl shadow-xs transition-colors disabled:opacity-50"
-            >
-              <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24">
-                <path
-                  fill="#4285F4"
-                  d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z"
-                />
-                <path
-                  fill="#34A853"
-                  d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.34 24 12 24z"
-                />
-                <path
-                  fill="#FBBC05"
-                  d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.16 0 9.97 0 12s.45 3.84 1.25 5.42l4.03-3.15z"
-                />
-                <path
-                  fill="#EA4335"
-                  d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.34 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"
-                />
-              </svg>
-              <span>{isLoggingIn ? '...' : 'Tautkan Google'}</span>
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={onManualSync}
+            disabled={isSyncing}
+            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl border border-emerald-200 bg-emerald-50/80 hover:bg-emerald-100/80 text-emerald-800 text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
+            title="Sinkronkan database sekarang"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
+            <span className="hidden sm:inline">{isSyncing ? 'Menyinkronkan...' : 'Sinkron'}</span>
+          </button>
         </div>
       </div>
 
-      {/* Google Sheets Status Pill & Quick Action Bar */}
-      <div className="mt-2.5 flex items-center justify-between text-xs px-3 py-2 rounded-xl bg-white border border-slate-200/90 shadow-2xs">
-        <button
-          type="button"
-          onClick={onOpenSheetModal}
-          className="flex items-center gap-1.5 text-left text-slate-700 hover:text-emerald-700 transition-colors min-w-0"
-        >
-          <Database className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-          <span className="font-semibold text-slate-800 truncate">
-            {currentSheetId ? 'Google Sheets Terhubung' : 'Penyimpanan Database Lokal'}
+      {/* Persistent Google Spreadsheet Status Bar */}
+      <div className="mt-2.5 flex items-center justify-between text-xs px-3 py-2 rounded-xl bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 border border-emerald-200 shadow-2xs">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="relative flex h-2.5 w-2.5 shrink-0">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-600"></span>
           </span>
-          <span className="text-[10px] px-1.5 py-0.2 bg-emerald-50 text-emerald-700 font-bold rounded border border-emerald-200 shrink-0">
-            ⚙️ Atur
-          </span>
-        </button>
-
-        {currentSheetId && (
-          <a
-            href={`https://docs.google.com/spreadsheets/d/${currentSheetId}/edit`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 hover:text-emerald-900 shrink-0 underline ml-2"
+          <button
+            type="button"
+            onClick={onOpenSheetModal}
+            className="font-bold text-emerald-900 truncate hover:underline text-left cursor-pointer flex items-center gap-1"
           >
-            <FileSpreadsheet className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Buka Sheet</span>
-            <ExternalLink className="w-3 h-3" />
-          </a>
-        )}
+            <span>Google Spreadsheet: {sheetTitle || 'Database Keuangan RQ Ulul Azmi (RAB & LAB)'}</span>
+          </button>
+        </div>
+
+        <div className="flex items-center gap-2 shrink-0 ml-2">
+          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-600 text-white">
+            Selalu Aktif
+          </span>
+          <button
+            type="button"
+            onClick={onOpenSheetModal}
+            className="text-[11px] font-semibold text-emerald-800 hover:text-emerald-950 underline cursor-pointer"
+          >
+            Pengaturan
+          </button>
+        </div>
       </div>
     </header>
   );
