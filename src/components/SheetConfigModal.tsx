@@ -207,15 +207,57 @@ function doPost(e) {
   };
 
   const handleTestWebhook = async () => {
-    if (!webAppUrl || !webAppUrl.startsWith('http')) {
+    const trimmedUrl = webAppUrl.trim();
+    if (!trimmedUrl || !trimmedUrl.startsWith('http')) {
       onNotify('Masukkan URL Webhook Google Apps Script terlebih dahulu.', 'error');
       return;
     }
+
+    // Client-side instant pre-validation to guide user before calling server
+    if (trimmedUrl.includes('docs.google.com/spreadsheets')) {
+      const msg = 'Tautan yang dimasukkan adalah tautan Google Spreadsheet, bukan endpoint Web App Google Apps Script. Buka tab "Metode 1: Google API" untuk menghubungkan spreadsheet tersebut, atau buat Web App Apps Script sesuai panduan di bawah.';
+      setTestResult({ ok: false, message: msg });
+      onNotify(msg, 'error');
+      return;
+    }
+
+    if (trimmedUrl.includes('/edit')) {
+      const msg = 'Tautan berakhiran /edit adalah halaman editor kode Apps Script. Pastikan Anda klik "Terapkan (Deploy)" > "Penerapan baru (New deployment)" > Pilih "Aplikasi Web" > Akses: "Siapa saja (Anyone)", lalu salin URL yang berakhiran "/exec".';
+      setTestResult({ ok: false, message: msg });
+      onNotify(msg, 'error');
+      return;
+    }
+
     setIsTestingWebhook(true);
     setTestResult(null);
     try {
-      const res = await fetch(`/api/test-webhook?url=${encodeURIComponent(webAppUrl.trim())}`);
-      const data = await res.json();
+      const res = await fetch(`/api/test-webhook?url=${encodeURIComponent(trimmedUrl)}`);
+      const text = await res.text();
+      let data: any = null;
+
+      try {
+        data = JSON.parse(text);
+      } catch {
+        // Handle non-JSON HTML/text response safely without SyntaxError
+        const lower = text.toLowerCase();
+        if (
+          text.includes('<!DOCTYPE') ||
+          text.includes('<html') ||
+          lower.includes('the page cannot be found') ||
+          lower.includes('the page could not be found')
+        ) {
+          data = {
+            ok: false,
+            message: 'Server Google mengembalikan halaman web HTML (Status ' + res.status + '). Pastikan URL berakhiran /exec dan saat deployment Web App di Google Spreadsheet, opsi "Yang memiliki akses (Who has access)" dipilih "Siapa saja (Anyone)".',
+          };
+        } else {
+          data = {
+            ok: false,
+            message: 'Respon dari endpoint bukan format JSON yang valid. Silakan periksa kembali URL Web App Anda (' + (text.slice(0, 60) || 'Respon kosong') + ').',
+          };
+        }
+      }
+
       setTestResult(data);
       if (data.ok) {
         onNotify(data.message, 'success');
@@ -223,7 +265,10 @@ function doPost(e) {
         onNotify(data.message, 'error');
       }
     } catch (e: any) {
-      setTestResult({ ok: false, message: 'Gagal menghubungi endpoint: ' + e.message });
+      setTestResult({
+        ok: false,
+        message: 'Gagal menghubungi endpoint: ' + (e.message || 'Periksa koneksi internet Anda.'),
+      });
       onNotify('Gagal menguji webhook.', 'error');
     } finally {
       setIsTestingWebhook(false);
@@ -264,14 +309,14 @@ function doPost(e) {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 font-bold text-emerald-900">
               <Database className="w-4 h-4 text-emerald-700" />
-              <span>Cloud Database (Firestore / NoSQL) Aktif</span>
+              <span>Cloud Database Aktif (Firestore / NoSQL)</span>
             </div>
             <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-600 text-white">
               Tersambung Realtime
             </span>
           </div>
           <p className="leading-relaxed text-slate-700 text-[11px] sm:text-xs">
-            Seluruh data transaksi kas, LAB, dan RAB kini <strong>langsung tersimpan di Cloud Database terpusat</strong>. Siapa pun pengurus yang membuka link aplikasi ini akan melihat data yang sama secara langsung dan realtime tanpa wajib login.
+            Aplikasi FIA sudah <strong>otomatis terhubung ke Cloud Database NoSQL (Google Cloud Firestore)</strong> — setara dengan Supabase atau MongoDB. Seluruh data transaksi, LAB, dan RAB tersimpan permanen dan tersinkronisasi otomatis antar-perangkat tanpa perlu login.
           </p>
         </div>
 
@@ -462,14 +507,39 @@ function doPost(e) {
 
               {testResult && (
                 <div
-                  className={`p-2.5 rounded-xl text-xs border ${
+                  className={`p-3 rounded-2xl text-xs border space-y-1.5 ${
                     testResult.ok
-                      ? 'bg-emerald-50 text-emerald-900 border-emerald-200'
-                      : 'bg-rose-50 text-rose-900 border-rose-200'
+                      ? 'bg-emerald-50 text-emerald-900 border-emerald-300'
+                      : 'bg-rose-50 text-rose-950 border-rose-300'
                   }`}
                 >
-                  <div className="font-bold">{testResult.ok ? 'Koneksi Berhasil!' : 'Koneksi Gagal:'}</div>
-                  <div>{testResult.message}</div>
+                  <div className="flex items-center gap-1.5 font-bold">
+                    {testResult.ok ? (
+                      <>
+                        <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+                        <span>Koneksi Berhasil!</span>
+                      </>
+                    ) : (
+                      <>
+                        <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                        <span>Koneksi Gagal:</span>
+                      </>
+                    )}
+                  </div>
+                  <div className="leading-relaxed">{testResult.message}</div>
+                  {!testResult.ok && (
+                    <div className="mt-2 pt-2 border-t border-rose-200/60 text-[11px] text-rose-900 space-y-1">
+                      <div className="font-semibold text-rose-950">Langkah Memperbaiki:</div>
+                      <ol className="list-decimal pl-4 space-y-0.5">
+                        <li>Buka spreadsheet Anda &gt; <strong>Ekstensi</strong> &gt; <strong>Apps Script</strong>.</li>
+                        <li>Pastikan kode di bawah sudah disalin dan disimpan.</li>
+                        <li>Klik <strong>Terapkan (Deploy)</strong> &gt; <strong>Penerapan baru (New deployment)</strong>.</li>
+                        <li>Pilih jenis <strong>Aplikasi Web (Web App)</strong>.</li>
+                        <li>Pada bagian <em>Yang memiliki akses (Who has access)</em>, pastikan pilih <strong>Siapa saja (Anyone)</strong>.</li>
+                        <li>Salin URL hasil deploy yang berakhiran <strong>/exec</strong>.</li>
+                      </ol>
+                    </div>
+                  )}
                 </div>
               )}
 

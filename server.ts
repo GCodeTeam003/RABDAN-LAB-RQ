@@ -186,15 +186,36 @@ async function syncToGoogleSheetWebhook(action: string, payload: any) {
 // API Routes
 app.get('/api/test-webhook', async (req: Request, res: Response) => {
   const db = readDb();
-  const url = (req.query.url as string) || db.sheetConfig?.webAppUrl;
+  const rawUrl = (req.query.url as string) || db.sheetConfig?.webAppUrl;
+  const url = (rawUrl || '').trim();
+
   if (!url || !url.startsWith('http')) {
     res.json({ ok: false, message: 'URL Webhook Google Apps Script belum diisi.' });
     return;
   }
 
+  // Pre-validate common user misconfigurations
+  if (url.includes('docs.google.com/spreadsheets')) {
+    res.json({
+      ok: false,
+      type: 'is_sheet_url',
+      message: 'Tautan yang dimasukkan adalah tautan Google Spreadsheet, bukan endpoint Web App Google Apps Script. Buka tab "Metode 1: Google API" untuk menghubungkan spreadsheet tersebut, atau buat Web App Apps Script sesuai panduan di bawah.',
+    });
+    return;
+  }
+
+  if (url.includes('/edit')) {
+    res.json({
+      ok: false,
+      type: 'is_editor_url',
+      message: 'Tautan yang dimasukkan adalah URL editor kode Apps Script (/edit). Pastikan Anda klik "Terapkan (Deploy)" > "Penerapan baru (New deployment)" > Pilih "Aplikasi Web (Web App)" > Akses: "Siapa saja (Anyone)", lalu salin URL yang berakhiran "/exec".',
+    });
+    return;
+  }
+
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10000);
+    const timeout = setTimeout(() => controller.abort(), 12000);
 
     const resp = await fetch(url, {
       method: 'POST',
@@ -205,7 +226,24 @@ app.get('/api/test-webhook', async (req: Request, res: Response) => {
     });
     clearTimeout(timeout);
 
+    if (resp.status === 404) {
+      res.json({
+        ok: false,
+        message: 'Endpoint Webhook tidak ditemukan (Status 404). Pastikan URL berakhiran /exec dan penerapan Web App di Google Spreadsheet masih aktif.',
+      });
+      return;
+    }
+
+    if (resp.status === 401 || resp.status === 403) {
+      res.json({
+        ok: false,
+        message: `Akses ke Web App ditolak (Status ${resp.status}). Saat menerapkan (Deploy) Web App di Google Apps Script, pastikan opsi "Yang memiliki akses (Who has access)" dipilih "Siapa saja (Anyone)".`,
+      });
+      return;
+    }
+
     const bodyText = await resp.text();
+
     if (bodyText.includes('doPost')) {
       res.json({
         ok: false,
@@ -215,10 +253,28 @@ app.get('/api/test-webhook', async (req: Request, res: Response) => {
       return;
     }
 
+    const lowerBody = bodyText.toLowerCase();
+    if (
+      bodyText.startsWith('<!DOCTYPE') ||
+      bodyText.startsWith('<html') ||
+      lowerBody.includes('the page cannot be found') ||
+      lowerBody.includes('the page could not be found')
+    ) {
+      res.json({
+        ok: false,
+        message: 'Google mengembalikan halaman web HTML, bukan respon data JSON. Hal ini biasanya terjadi jika hak akses Web App belum disetel ke "Siapa saja (Anyone)" atau URL belum berupa link deployment publik /exec.',
+      });
+      return;
+    }
+
     try {
       const parsed = JSON.parse(bodyText);
       if (parsed.ok) {
-        res.json({ ok: true, message: 'Webhook Google Apps Script terhubung dengan sempurna dan siap menerima data!' });
+        res.json({ ok: true, message: 'Webhook Google Apps Script terhubung dengan sempurna dan siap menerima data otomatis!' });
+        return;
+      }
+      if (parsed.message) {
+        res.json({ ok: true, message: parsed.message });
         return;
       }
     } catch (_) {}
@@ -228,10 +284,13 @@ app.get('/api/test-webhook', async (req: Request, res: Response) => {
       message: 'Koneksi ke server Google Apps Script berhasil dijangkau (Status ' + resp.status + ').',
     });
   } catch (e: any) {
+    const errorMsg = e.name === 'AbortError'
+      ? 'Koneksi timeout setelah 12 detik. Server Apps Script membutuhkan waktu terlalu lama untuk merespon.'
+      : e.message;
     res.json({
       ok: false,
       type: 'network_error',
-      message: 'Gagal menghubungi URL Webhook: ' + e.message,
+      message: 'Gagal menghubungi URL Webhook: ' + errorMsg,
     });
   }
 });

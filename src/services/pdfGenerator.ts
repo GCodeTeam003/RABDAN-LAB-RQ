@@ -20,7 +20,7 @@ export function generateRABPDFBlob(rab: RABRecord): { blob: Blob; url: string } 
   y += 5.5;
 
   doc.setFontSize(14);
-  doc.text('YAYASAN MUTIARA UMMAH (YMU)', pageWidth / 2, y, { align: 'center' });
+  doc.text('YAYASAN MISYKATUL UMMAH (YMU)', pageWidth / 2, y, { align: 'center' });
   y += 6;
 
   doc.setFontSize(15);
@@ -173,7 +173,7 @@ export function generateLABPDFBlob(
   y += 5.5;
 
   doc.setFontSize(14);
-  doc.text('YAYASAN MUTIARA UMMAH (YMU)', pageWidth / 2, y, { align: 'center' });
+  doc.text('YAYASAN MISYKATUL UMMAH (YMU)', pageWidth / 2, y, { align: 'center' });
   y += 6;
 
   doc.setFontSize(15);
