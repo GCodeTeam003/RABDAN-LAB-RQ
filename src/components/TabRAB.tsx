@@ -389,12 +389,13 @@ export const TabRAB: React.FC<TabRABProps> = ({
             <div className="pt-1">
               <a
                 href={resultCard.pdfUrl}
+                download={resultCard.rab ? `RAB_RQ_Ulul_Azmi_${resultCard.rab.bulan}_${resultCard.rab.tahun}.pdf` : 'RAB_RQ_Ulul_Azmi.pdf'}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg shadow-xs transition-colors min-h-[42px]"
               >
                 <ExternalLink className="w-4 h-4" />
-                <span>🔗 Buka Dokumen PDF RAB</span>
+                <span>📥 Unduh / Buka Dokumen PDF RAB</span>
               </a>
             </div>
           )}

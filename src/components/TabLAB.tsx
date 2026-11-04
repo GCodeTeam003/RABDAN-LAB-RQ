@@ -234,12 +234,13 @@ export const TabLAB: React.FC<TabLABProps> = ({
             {resultCard.pdfUrl && (
               <a
                 href={resultCard.pdfUrl}
+                download={resultCard.lab ? `LAB_RQ_Ulul_Azmi_${resultCard.lab.bulan}_${resultCard.lab.tahun}.pdf` : 'LAB_RQ_Ulul_Azmi.pdf'}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg shadow-xs transition-colors min-h-[42px]"
               >
                 <ExternalLink className="w-4 h-4" />
-                <span>🔗 Buka PDF LAB</span>
+                <span>📥 Unduh / Buka PDF LAB</span>
               </a>
             )}
             <button

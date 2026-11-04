@@ -130,3 +130,88 @@ export function formatTanggalIndonesia(isoDateStr: string): string {
   }
   return isoDateStr;
 }
+
+/**
+ * Format ISO date string (YYYY-MM-DD) to formal letter date format with 2-digit day: 02 November 2026
+ */
+export function formatTanggalSurat(isoDateStr: string): string {
+  if (!isoDateStr) return '';
+  try {
+    const parts = isoDateStr.split('-');
+    if (parts.length === 3) {
+      const year = parts[0];
+      const month = parseInt(parts[1], 10) - 1;
+      const day = parts[2].padStart(2, '0');
+      if (month >= 0 && month < BULAN_NAMES.length) {
+        return `${day} ${BULAN_NAMES[month]} ${year}`;
+      }
+    }
+  } catch (e) {
+    // fallback
+  }
+  return isoDateStr;
+}
+
+/**
+ * Format ISO date string (YYYY-MM-DD) to table date format: dd/mm/yyyy (e.g. 01/08/2025)
+ */
+export function formatTanggalTable(isoDateStr: string): string {
+  if (!isoDateStr) return '';
+  try {
+    const parts = isoDateStr.split('-');
+    if (parts.length === 3) {
+      const year = parts[0];
+      const month = parts[1].padStart(2, '0');
+      const day = parts[2].padStart(2, '0');
+      return `${day}/${month}/${year}`;
+    }
+  } catch (e) {
+    // fallback
+  }
+  return isoDateStr;
+}
+
+/**
+ * Formats currency in LAB style: Rp 3.150.000,00 (or -Rp 2.796.000,00 if negative)
+ */
+export function formatCurrencyLAB(amount: number | string | null | undefined): string {
+  const val = Math.round(Number(amount) || 0);
+  const isNeg = val < 0;
+  const absVal = Math.abs(val);
+  const formatted = absVal.toLocaleString('id-ID') + ',00';
+  return isNeg ? `-Rp ${formatted}` : `Rp ${formatted}`;
+}
+
+/**
+ * Formats currency in RAB style: Rp. 7.230.000
+ */
+export function formatCurrencyRAB(amount: number | string | null | undefined): string {
+  const val = Math.round(Number(amount) || 0);
+  const isNeg = val < 0;
+  const absVal = Math.abs(val);
+  const formatted = absVal.toLocaleString('id-ID');
+  return isNeg ? `-Rp. ${formatted}` : `Rp. ${formatted}`;
+}
+
+/**
+ * Returns previous month name and year
+ */
+export function getPreviousMonthInfo(
+  bulan: string,
+  tahun: number | string
+): { bulan: string; tahun: number } {
+  const clean = (bulan || '').trim().toLowerCase();
+  const mIdx = BULAN_NAMES.findIndex((b) => b.toLowerCase() === clean);
+  const yearNum =
+    typeof tahun === 'number'
+      ? tahun
+      : parseInt(String(tahun), 10) || new Date().getFullYear();
+
+  if (mIdx === -1) {
+    return { bulan: 'Sebelumnya', tahun: yearNum };
+  }
+  if (mIdx === 0) {
+    return { bulan: 'Desember', tahun: yearNum - 1 };
+  }
+  return { bulan: BULAN_NAMES[mIdx - 1], tahun: yearNum };
+}

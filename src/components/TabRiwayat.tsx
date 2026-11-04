@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { LABRecord, RABRecord, TransaksiRecord } from '../types';
 import { formatRupiah, formatTanggalIndonesia } from '../utils/formatters';
 import { generateLABPDFBlob, generateRABPDFBlob } from '../services/pdfGenerator';
-import { RefreshCw, FileText, ExternalLink, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
+import { RefreshCw, FileText, ExternalLink, Trash2, ChevronDown, ChevronUp, Pencil, Sliders } from 'lucide-react';
 
 interface TabRiwayatProps {
   labList: LABRecord[];
@@ -13,6 +13,9 @@ interface TabRiwayatProps {
   onNotify: (msg: string, type?: 'success' | 'error') => void;
   onRequestDeleteLAB: (lab: LABRecord) => void;
   onRequestDeleteRAB: (rab: RABRecord) => void;
+  onEditTransaksi?: (trx: TransaksiRecord) => void;
+  onRequestDeleteTransaksi?: (trx: TransaksiRecord) => void;
+  onOpenSigModal?: () => void;
 }
 
 export const TabRiwayat: React.FC<TabRiwayatProps> = ({
@@ -24,6 +27,9 @@ export const TabRiwayat: React.FC<TabRiwayatProps> = ({
   onNotify,
   onRequestDeleteLAB,
   onRequestDeleteRAB,
+  onEditTransaksi,
+  onRequestDeleteTransaksi,
+  onOpenSigModal,
 }) => {
   const [activeSegment, setActiveSegment] = useState<'rab' | 'lab'>('rab');
   const [generatingId, setGeneratingId] = useState<string | null>(null);
@@ -33,6 +39,15 @@ export const TabRiwayat: React.FC<TabRiwayatProps> = ({
     setExpandedId((prev) => (prev === id ? null : id));
   };
 
+  const downloadPDFBlob = (url: string, filename: string) => {
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
+
   const handleGeneratePDF = async (type: 'RAB' | 'LAB', id: string) => {
     setGeneratingId(id);
     try {
@@ -40,15 +55,17 @@ export const TabRiwayat: React.FC<TabRiwayatProps> = ({
         const rab = rabList.find((r) => r.id === id);
         if (!rab) return;
         const pdf = generateRABPDFBlob(rab);
-        window.open(pdf.url, '_blank');
-        onNotify('✅ PDF RAB berhasil dibuat', 'success');
+        const filename = `RAB_RQ_Ulul_Azmi_${rab.bulan}_${rab.tahun}.pdf`;
+        downloadPDFBlob(pdf.url, filename);
+        onNotify('✅ PDF RAB resmi berhasil diunduh', 'success');
       } else {
         const lab = labList.find((l) => l.id === id);
         if (!lab) return;
         const matchingTrx = transaksiList.filter((t) => t.idLAB === id);
         const pdf = generateLABPDFBlob(lab, matchingTrx);
-        window.open(pdf.url, '_blank');
-        onNotify('✅ PDF LAB berhasil dibuat', 'success');
+        const filename = `LAB_RQ_Ulul_Azmi_${lab.bulan}_${lab.tahun}.pdf`;
+        downloadPDFBlob(pdf.url, filename);
+        onNotify('✅ PDF LAB resmi berhasil diunduh', 'success');
       }
     } catch (e: any) {
       onNotify('Gagal membuat PDF: ' + (e.message || 'Error'), 'error');
@@ -85,16 +102,29 @@ export const TabRiwayat: React.FC<TabRiwayatProps> = ({
         </button>
       </div>
 
-      {/* Refresh Button */}
-      <button
-        type="button"
-        onClick={onRefresh}
-        disabled={isRefreshing}
-        className="w-full py-2 px-3 bg-white hover:bg-slate-50 border border-slate-300 text-blue-600 font-semibold rounded-xl text-xs sm:text-sm shadow-xs flex items-center justify-center gap-1.5 transition-colors disabled:opacity-50"
-      >
-        <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
-        <span>{isRefreshing ? 'Memuat dari Google Sheets...' : '🔄 Refresh Data'}</span>
-      </button>
+      {/* Action Bar (Refresh & Signature Settings) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        <button
+          type="button"
+          onClick={onRefresh}
+          disabled={isRefreshing}
+          className="w-full py-2 px-3 bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 font-semibold rounded-xl text-xs sm:text-sm shadow-xs flex items-center justify-center gap-1.5 transition-colors disabled:opacity-50 cursor-pointer"
+        >
+          <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-emerald-600' : ''}`} />
+          <span>{isRefreshing ? 'Memuat dari Cloud/Sheets...' : '🔄 Refresh Data'}</span>
+        </button>
+
+        {onOpenSigModal && (
+          <button
+            type="button"
+            onClick={onOpenSigModal}
+            className="w-full py-2 px-3 bg-white hover:bg-blue-50 border border-blue-200 text-blue-700 font-semibold rounded-xl text-xs sm:text-sm shadow-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+          >
+            <Sliders className="w-3.5 h-3.5 text-blue-600" />
+            <span>⚙️ Atur Posisi Tanda Tangan PDF</span>
+          </button>
+        )}
+      </div>
 
       {/* List Container */}
       <div id="riwayat-list" className="space-y-3">
@@ -289,20 +319,44 @@ export const TabRiwayat: React.FC<TabRiwayatProps> = ({
                         </p>
                       ) : (
                         matchingTrx.map((trx, idx) => (
-                          <div key={trx.id || idx} className="flex justify-between py-1 border-b border-slate-50">
-                            <div>
-                              <span className="font-medium text-slate-800">{trx.keterangan}</span>
+                          <div key={trx.id || idx} className="flex items-center justify-between py-1.5 border-b border-slate-50 gap-2">
+                            <div className="min-w-0 pr-1">
+                              <span className="font-medium text-slate-800 block truncate">{trx.keterangan}</span>
                               <span className="text-[10px] text-slate-400 block">
                                 {formatTanggalIndonesia(trx.tanggal)}
                               </span>
                             </div>
-                            <div className="text-right">
-                              {trx.masuk > 0 && (
-                                <span className="font-bold text-emerald-600">+{formatRupiah(trx.masuk)}</span>
-                              )}
-                              {trx.keluar > 0 && (
-                                <span className="font-bold text-rose-600">-{formatRupiah(trx.keluar)}</span>
-                              )}
+                            <div className="flex items-center gap-2 shrink-0">
+                              <div className="text-right">
+                                {trx.masuk > 0 && (
+                                  <span className="font-bold text-emerald-600 block">+{formatRupiah(trx.masuk)}</span>
+                                )}
+                                {trx.keluar > 0 && (
+                                  <span className="font-bold text-rose-600 block">-{formatRupiah(trx.keluar)}</span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-0.5">
+                                {onEditTransaksi && (
+                                  <button
+                                    type="button"
+                                    onClick={() => onEditTransaksi(trx)}
+                                    className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors cursor-pointer"
+                                    title="Edit transaksi ini"
+                                  >
+                                    <Pencil className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
+                                {onRequestDeleteTransaksi && (
+                                  <button
+                                    type="button"
+                                    onClick={() => onRequestDeleteTransaksi(trx)}
+                                    className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-colors cursor-pointer"
+                                    title="Hapus transaksi ini"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
+                              </div>
                             </div>
                           </div>
                         ))

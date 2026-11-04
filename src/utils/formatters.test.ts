@@ -7,6 +7,11 @@ import {
   calculateRABTotal,
   calculateLABBalance,
   formatTanggalIndonesia,
+  formatTanggalSurat,
+  formatTanggalTable,
+  formatCurrencyLAB,
+  formatCurrencyRAB,
+  getPreviousMonthInfo,
 } from './formatters';
 
 test('getRomanMonth converts month names and indices correctly', () => {
@@ -56,4 +61,39 @@ test('calculateLABBalance computes saldo akhir correctly', () => {
 test('formatTanggalIndonesia formats ISO date correctly', () => {
   assert.equal(formatTanggalIndonesia('2026-11-03'), '3 November 2026');
   assert.equal(formatTanggalIndonesia('2025-01-15'), '15 Januari 2025');
+});
+
+test('calculateLABBalance updates correctly when a transaction nominal is edited', () => {
+  const initialTransactions = [
+    { id: 'trx-1', masuk: 1000000, keluar: 0 },
+    { id: 'trx-2', masuk: 0, keluar: 200000 },
+  ];
+  const initialBalance = calculateLABBalance(5000000, initialTransactions);
+  assert.equal(initialBalance.saldoAkhir, 5800000);
+
+  // User edits trx-2 from 200.000 to 450.000 due to input mistake
+  const updatedTransactions = initialTransactions.map((t) =>
+    t.id === 'trx-2' ? { ...t, keluar: 450000 } : t
+  );
+  const updatedBalance = calculateLABBalance(5000000, updatedTransactions);
+  assert.equal(updatedBalance.totalKeluar, 450000);
+  assert.equal(updatedBalance.saldoAkhir, 5550000);
+});
+
+test('formatTanggalSurat formats formal date with 2-digit day', () => {
+  assert.equal(formatTanggalSurat('2026-11-02'), '02 November 2026');
+  assert.equal(formatTanggalSurat('2025-08-31'), '31 Agustus 2025');
+  assert.equal(formatTanggalTable('2025-08-01'), '01/08/2025');
+});
+
+test('formatCurrencyLAB and formatCurrencyRAB match official reference styles', () => {
+  assert.equal(formatCurrencyLAB(3150000), 'Rp 3.150.000,00');
+  assert.equal(formatCurrencyLAB(-2796000), '-Rp 2.796.000,00');
+  assert.equal(formatCurrencyLAB(0), 'Rp 0,00');
+
+  assert.equal(formatCurrencyRAB(7230000), 'Rp. 7.230.000');
+  assert.equal(formatCurrencyRAB(9453000), 'Rp. 9.453.000');
+
+  assert.deepEqual(getPreviousMonthInfo('Agustus', 2025), { bulan: 'Juli', tahun: 2025 });
+  assert.deepEqual(getPreviousMonthInfo('Januari', 2026), { bulan: 'Desember', tahun: 2025 });
 });

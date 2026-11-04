@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { LABRecord, TransaksiRecord } from '../types';
 import { formatRupiah, formatTanggalIndonesia } from '../utils/formatters';
 import { generateLABPDFBlob } from '../services/pdfGenerator';
-import { FileText, ExternalLink, Trash2, ArrowDownLeft, ArrowUpRight } from 'lucide-react';
+import { FileText, ExternalLink, Trash2, ArrowDownLeft, ArrowUpRight, Pencil } from 'lucide-react';
 
 interface TabTransaksiProps {
   labList: LABRecord[];
@@ -16,6 +16,7 @@ interface TabTransaksiProps {
   }) => Promise<{ idLAB: string; updatedLAB?: LABRecord }>;
   onNotify: (msg: string, type?: 'success' | 'error') => void;
   onRequestDelete: (trx: TransaksiRecord) => void;
+  onEditTransaksi?: (trx: TransaksiRecord) => void;
 }
 
 export const TabTransaksi: React.FC<TabTransaksiProps> = ({
@@ -24,6 +25,7 @@ export const TabTransaksi: React.FC<TabTransaksiProps> = ({
   onSubmitTransaksi,
   onNotify,
   onRequestDelete,
+  onEditTransaksi,
 }) => {
   const [selectedLabId, setSelectedLabId] = useState<string>('');
   const [tanggal, setTanggal] = useState<string>('');
@@ -112,9 +114,15 @@ export const TabTransaksi: React.FC<TabTransaksiProps> = ({
     if (!targetLab) return;
     const matchingTrx = transaksiList.filter((t) => t.idLAB === resultCard.idLAB);
     const pdf = generateLABPDFBlob(targetLab, matchingTrx);
-    window.open(pdf.url, '_blank');
+    const filename = `LAB_RQ_Ulul_Azmi_${targetLab.bulan}_${targetLab.tahun}.pdf`;
+    const a = document.createElement('a');
+    a.href = pdf.url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
     setResultCard((prev) => ({ ...prev, pdfUrl: pdf.url }));
-    onNotify('PDF LAB berhasil dibuat', 'success');
+    onNotify('✅ PDF LAB resmi berhasil diunduh', 'success');
   };
 
   const filteredTrx = transaksiList.filter((t) => t.idLAB === selectedLabId);
@@ -322,14 +330,26 @@ export const TabTransaksi: React.FC<TabTransaksiProps> = ({
                     {t.keluar > 0 && (
                       <span className="font-bold text-rose-600">-{formatRupiah(t.keluar)}</span>
                     )}
-                    <button
-                      type="button"
-                      onClick={() => onRequestDelete(t)}
-                      className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors min-w-[32px] min-h-[32px] flex items-center justify-center"
-                      title="Hapus transaksi"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    <div className="flex items-center gap-1">
+                      {onEditTransaksi && (
+                        <button
+                          type="button"
+                          onClick={() => onEditTransaksi(t)}
+                          className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors min-w-[32px] min-h-[32px] flex items-center justify-center cursor-pointer"
+                          title="Edit transaksi"
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => onRequestDelete(t)}
+                        className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors min-w-[32px] min-h-[32px] flex items-center justify-center cursor-pointer"
+                        title="Hapus transaksi"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}

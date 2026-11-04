@@ -1,6 +1,7 @@
 import {
   collection,
   doc,
+  getDoc,
   setDoc,
   getDocs,
   deleteDoc,
@@ -12,6 +13,35 @@ import { LABRecord, RABRecord, TransaksiRecord } from '../types';
 export const LAB_COLLECTION = 'lab';
 export const TRANSAKSI_COLLECTION = 'transaksi';
 export const RAB_COLLECTION = 'rab';
+
+export interface SharedGoogleAuth {
+  connected: boolean;
+  email?: string;
+  displayName?: string;
+  photoURL?: string;
+  connectedAt?: string;
+}
+
+export async function saveFirestoreSharedAuth(authData: SharedGoogleAuth): Promise<void> {
+  const docRef = doc(db, 'settings', 'shared_google_auth');
+  try {
+    await setDoc(docRef, authData);
+  } catch (err) {
+    handleFirestoreError(err, OperationType.WRITE, 'settings/shared_google_auth');
+  }
+}
+
+export async function getFirestoreSharedAuth(): Promise<SharedGoogleAuth | null> {
+  try {
+    const snap = await getDoc(doc(db, 'settings', 'shared_google_auth'));
+    if (snap.exists()) {
+      return snap.data() as SharedGoogleAuth;
+    }
+  } catch (err) {
+    console.warn('Notice reading shared auth from Firestore:', err);
+  }
+  return null;
+}
 
 /**
  * Fetch all documents from Firestore collections

@@ -1,9 +1,10 @@
-import React from 'react';
 import { User } from 'firebase/auth';
-import { RefreshCw, FileSpreadsheet, LogIn, CheckCircle2 } from 'lucide-react';
+import { AppGoogleUser } from '../services/auth';
+import { RefreshCw, FileSpreadsheet, CheckCircle2, Sliders } from 'lucide-react';
 
 interface NavbarProps {
-  user: User | null;
+  user: User | AppGoogleUser | null;
+  sharedGoogleEmail?: string;
   onLogin: () => void;
   onLogout: () => void;
   isLoggingIn: boolean;
@@ -12,18 +13,21 @@ interface NavbarProps {
   isSyncing: boolean;
   onManualSync: () => void;
   spreadsheetId?: string;
+  onOpenSigModal?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
   user,
-  onLogin,
-  isLoggingIn,
+  sharedGoogleEmail,
   onOpenSheetModal,
   sheetTitle,
   isSyncing,
   onManualSync,
   spreadsheetId,
+  onOpenSigModal,
 }) => {
+  const activeEmail = user?.email || sharedGoogleEmail;
+  const activeName = user?.displayName || (activeEmail ? activeEmail.split('@')[0] : '');
   return (
     <header className="mb-4 sm:mb-6">
       {/* Brand Header */}
@@ -49,7 +53,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         {/* Action Buttons */}
         <div className="flex items-center gap-1.5 shrink-0">
-          {!user ? (
+          {!activeEmail ? (
             <button
               type="button"
               onClick={onOpenSheetModal}
@@ -63,10 +67,22 @@ export const Navbar: React.FC<NavbarProps> = ({
               type="button"
               onClick={onOpenSheetModal}
               className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-emerald-300 bg-emerald-100/70 text-emerald-900 text-xs font-bold shadow-2xs transition-colors cursor-pointer"
-              title={`Terhubung sebagai ${user.email}`}
+              title={`Terhubung ke Google: ${activeEmail} (Aktif di Semua Perangkat)`}
             >
               <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-              <span className="truncate max-w-[100px] sm:max-w-[140px]">{user.displayName || user.email?.split('@')[0]}</span>
+              <span className="truncate max-w-[100px] sm:max-w-[140px]">{activeName}</span>
+            </button>
+          )}
+
+          {onOpenSigModal && (
+            <button
+              type="button"
+              onClick={onOpenSigModal}
+              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
+              title="Atur posisi tanda tangan dokumen PDF"
+            >
+              <Sliders className="w-3.5 h-3.5 text-blue-600" />
+              <span className="hidden sm:inline">Posisi TTD</span>
             </button>
           )}
 
