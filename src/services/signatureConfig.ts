@@ -1,7 +1,7 @@
 /**
  * Konfigurasi Posisi dan Tata Letak Tanda Tangan PDF (RAB & LAB)
  * Menggunakan satuan milimeter (mm).
- * Lebar kertas A4 = 210mm, Tinggi = 297mm, Margin kiri/kanan = 15mm.
+ * Kertas F4 / Folio = Lebar 210mm x Panjang 330mm, Margin kiri/kanan = 15mm.
  */
 
 export interface SignatureLayoutConfig {
@@ -15,12 +15,12 @@ export interface SignatureLayoutConfig {
   };
   lab: {
     // Mode posisi tanda tangan LAB:
-    // 'right'  : Di sebelah kanan surat (standar surat dinas)
+    // 'right'  : Di sebelah kanan surat (standar surat dinas resmi)
     // 'spread' : Menyebar seimbang kiri (Ketua) dan kanan (Bendahara)
     // 'center' : Berdampingan tepat di tengah halaman
     layout: 'right' | 'spread' | 'center';
     yOffset: number; // Geser vertikal (+ ke bawah, - ke atas dalam mm)
-    rightCenterX: number; // Posisi horizontal Titimangsa & "Mengetahui," saat layout 'right' (standar: 150)
+    rightCenterX: number; // Posisi horizontal Titimangsa (Kota & Tanggal Surat) di sisi kanan (standar: 150)
     ketuaX: number; // Posisi horizontal Ketua Rumah Qur'an saat layout 'right' (standar: 122)
     bendaharaX: number; // Posisi horizontal Bendahara Rumah Qur'an saat layout 'right' (standar: 172)
     spaceSignatureY: number; // Ruang tanda tangan antara jabatan dan nama (standar: 24)
@@ -40,8 +40,8 @@ export const DEFAULT_SIGNATURE_CONFIG: SignatureLayoutConfig = {
     layout: 'right',
     yOffset: 0,
     rightCenterX: 150,
-    ketuaX: 90,
-    bendaharaX: 152,
+    ketuaX: 122,
+    bendaharaX: 172,
     spaceSignatureY: 24,
   },
 };
@@ -54,9 +54,15 @@ export function getSignatureConfig(): SignatureLayoutConfig {
     const raw = localStorage.getItem(SIG_CONFIG_KEY);
     if (!raw) return DEFAULT_SIGNATURE_CONFIG;
     const parsed = JSON.parse(raw);
+    const labCfg = parsed.lab || {};
+    // Upgrade legacy stored coordinates to aligned right defaults if unmodified
+    if (labCfg.ketuaX === 90 && labCfg.bendaharaX === 152) {
+      labCfg.ketuaX = 122;
+      labCfg.bendaharaX = 172;
+    }
     return {
       rab: { ...DEFAULT_SIGNATURE_CONFIG.rab, ...(parsed.rab || {}) },
-      lab: { ...DEFAULT_SIGNATURE_CONFIG.lab, ...(parsed.lab || {}) },
+      lab: { ...DEFAULT_SIGNATURE_CONFIG.lab, ...labCfg },
     };
   } catch (e) {
     return DEFAULT_SIGNATURE_CONFIG;

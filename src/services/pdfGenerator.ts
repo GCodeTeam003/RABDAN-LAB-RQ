@@ -13,7 +13,7 @@ import {
   getSignatureConfig,
 } from './signatureConfig';
 
-// F4 Page dimensions (mm)
+// F4 / Folio Page dimensions (mm): Lebar 210mm x Panjang 330mm
 const PAGE_WIDTH = 210;
 const PAGE_HEIGHT = 330;
 const MARGIN_LEFT = 15;
@@ -25,13 +25,13 @@ const CONTENT_WIDTH = PAGE_WIDTH - MARGIN_LEFT - MARGIN_RIGHT; // 180mm
  * PANDUAN CARA MENGGESER POSISI BAGIAN TANDA TANGAN:
  * "Mengetahui, Ketua Rumah Qur'an / Bendahara Rumah Qur'an (AL MUTAQIN / HAMIDAH FAUZIYAH)"
  * ============================================================================
- * Ukuran kertas A4 = 210 mm (Lebar) x 297 mm (Tinggi).
+ * Ukuran kertas F4 / Folio = 210 mm (Lebar) x 330 mm (Panjang).
  *
  * 1. MENGGESER SECARA HORIZONTAL (KIRI <---> KANAN):
  *    - Nilai X menentukan posisi horizontal dari tepi kiri kertas (dalam milimeter / mm).
  *    - Ingin geser lebih ke KIRI? -> KURANGI nilai X (misal: 150 -> 135, atau 122 -> 100).
  *    - Ingin geser lebih ke KANAN? -> TAMBAH nilai X (misal: 150 -> 160, atau 172 -> 178).
- *    - Titik tengah persis kertas A4 adalah X = 105 mm.
+ *    - Titik tengah persis kertas adalah X = 105 mm. Sisi kanan adalah X = 150 mm.
  *
  * 2. MENGGESER SECARA VERTIKAL (ATAS <---> BAWAH):
  *    - Nilai Y menentukan posisi vertikal dari tepi atas kertas (dalam milimeter / mm).
@@ -104,14 +104,19 @@ function createPDFResult(doc: jsPDF): { blob: Blob; url: string } {
 }
 
 /**
- * Helper to calculate signature coordinates for LAB based on configured layout
+ * Helper to calculate signature coordinates for LAB based on configured layout.
+ * Memastikan nama kota dan tanggal surat SELALU diletakkan di posisi kanan.
  */
 function getLABSignatureCoords(cfg: SignatureLayoutConfig) {
   const labCfg = cfg.lab;
+  const rightCenterX = labCfg.rightCenterX || 150;
+
   if (labCfg.layout === 'spread') {
-    // Layout Menyebar (Ketua di kiri, Bendahara di kanan seimbang)
+    // Layout Menyebar (Ketua di kiri 55mm, Bendahara di kanan 155mm)
+    // Titimangsa (Nama Kota Dan Tanggal Surat) SELALU di posisi kanan (155mm / di atas Bendahara)
     return {
       sigSectionCenterX: 105,
+      dateRightX: 155,
       ketuaColX: 55,
       bendaharaColX: 155,
       yOffset: labCfg.yOffset || 0,
@@ -119,8 +124,10 @@ function getLABSignatureCoords(cfg: SignatureLayoutConfig) {
     };
   } else if (labCfg.layout === 'center') {
     // Layout Berdampingan di Tengah
+    // Titimangsa (Nama Kota Dan Tanggal Surat) SELALU di posisi kanan (150mm)
     return {
       sigSectionCenterX: 105,
+      dateRightX: rightCenterX,
       ketuaColX: 80,
       bendaharaColX: 130,
       yOffset: labCfg.yOffset || 0,
@@ -128,8 +135,10 @@ function getLABSignatureCoords(cfg: SignatureLayoutConfig) {
     };
   } else {
     // Layout Rata Kanan (Standar Surat Resmi)
+    // Seluruh blok tanda tangan dan Titimangsa berada di posisi kanan (150mm)
     return {
-      sigSectionCenterX: labCfg.rightCenterX || 150,
+      sigSectionCenterX: rightCenterX,
+      dateRightX: rightCenterX,
       ketuaColX: labCfg.ketuaX || 122,
       bendaharaColX: labCfg.bendaharaX || 172,
       yOffset: labCfg.yOffset || 0,
@@ -153,7 +162,7 @@ export function generateRABPDFBlob(
   const doc = new jsPDF({
     orientation: 'portrait',
     unit: 'mm',
-    format: 'a4',
+    format: [PAGE_WIDTH, PAGE_HEIGHT], // F4/Folio: 210mm x 330mm
   });
 
   // ================= PAGE 1: SURAT PERMOHONAN =================
@@ -225,8 +234,8 @@ export function generateRABPDFBlob(
 
   // ================= BLOK TANDA TANGAN RAB =================
   const tanggalSurat =
-    formatTanggalSurat(rab.tanggal) || `02 ${rab.bulan} ${rab.tahun}`;
-  const kota = rab.kota || 'Kibang Budi Jaya';
+    formatTanggalSurat(rab.tanggal) || (rab.tanggal ? formatTanggalSurat(rab.tanggal) : `04 ${rab.bulan} ${rab.tahun}`);
+  const kota = (rab.kota || 'Kibang Budi Jaya').trim();
 
   // 1. Sisi Kiri: Yang menyetujui (Ketua Yayasan)
   const leftColX = rabCfg.leftColX || 45;
@@ -234,6 +243,7 @@ export function generateRABPDFBlob(
   doc.text('Ketua Yayasan Misykatul Ummah', leftColX, y + 5, { align: 'center' });
 
   // 2. Sisi Kanan: Titimangsa & "Mengetahui,"
+  // Nama Kota Dan Tanggal Surat SELALU diletakkan di posisi kanan (Contoh: Kibang Budi Jaya, 04 November 2026)
   const rightSectionCenterX = rabCfg.rightCenterX || 150;
   doc.text(`${kota}, ${tanggalSurat}`, rightSectionCenterX, y - 6, { align: 'center' });
   doc.text('Mengetahui,', rightSectionCenterX, y, { align: 'center' });
@@ -259,7 +269,7 @@ export function generateRABPDFBlob(
   });
 
   // ================= PAGE 2: LAMPIRAN RINCIAN ANGGARAN =================
-  doc.addPage();
+  doc.addPage([PAGE_WIDTH, PAGE_HEIGHT], 'portrait');
   y = 20;
 
   doc.setFont('times', 'bold');
@@ -348,12 +358,12 @@ export function generateLABPDFBlob(
   const doc = new jsPDF({
     orientation: 'portrait',
     unit: 'mm',
-    format: 'a4',
+    format: [PAGE_WIDTH, PAGE_HEIGHT], // F4/Folio: 210mm x 330mm
   });
 
   const tanggalSurat =
-    formatTanggalSurat(lab.tanggal) || `31 ${lab.bulan} ${lab.tahun}`;
-  const kota = lab.kota || 'Kibang Budi Jaya';
+    formatTanggalSurat(lab.tanggal) || (lab.tanggal ? formatTanggalSurat(lab.tanggal) : `04 ${lab.bulan} ${lab.tahun}`);
+  const kota = (lab.kota || 'Kibang Budi Jaya').trim();
   const prevInfo = getPreviousMonthInfo(lab.bulan, lab.tahun);
 
   // ================= PAGE 1: SURAT PENGANTAR =================
@@ -432,7 +442,8 @@ export function generateLABPDFBlob(
   y += 16 + labCoords.yOffset;
 
   // ================= BLOK TANDA TANGAN LAB (HALAMAN 1) =================
-  doc.text(`${kota}, ${tanggalSurat}`, labCoords.sigSectionCenterX, y, { align: 'center' });
+  // Titimangsa (Nama Kota Dan Tanggal Surat) SELALU diletakkan di posisi kanan
+  doc.text(`${kota}, ${tanggalSurat}`, labCoords.dateRightX, y, { align: 'center' });
   y += 6;
   doc.text('Mengetahui,', labCoords.sigSectionCenterX, y, { align: 'center' });
   y += 6;
@@ -448,7 +459,7 @@ export function generateLABPDFBlob(
   });
 
   // ================= PAGE 2: LAMPIRAN 1 (REKAPITULASI KEUANGAN) =================
-  doc.addPage();
+  doc.addPage([PAGE_WIDTH, PAGE_HEIGHT], 'portrait');
   y = drawKopSurat(doc, 10);
 
   // Document Title
@@ -528,7 +539,7 @@ export function generateLABPDFBlob(
   sortedTrx.forEach((trx, i) => {
     // Check pagination
     if (y + rowHeight > PAGE_HEIGHT - 35) {
-      doc.addPage();
+      doc.addPage([PAGE_WIDTH, PAGE_HEIGHT], 'portrait');
       y = drawKopSurat(doc, 10);
       y = drawTableHeader(y);
       doc.setFont('times', 'normal');
@@ -569,7 +580,7 @@ export function generateLABPDFBlob(
 
   // Final Row: SALDO AKHIR
   if (y + rowHeight > PAGE_HEIGHT - 35) {
-    doc.addPage();
+    doc.addPage([PAGE_WIDTH, PAGE_HEIGHT], 'portrait');
     y = drawKopSurat(doc, 10);
     y = drawTableHeader(y);
   }
@@ -586,13 +597,14 @@ export function generateLABPDFBlob(
 
   // Signature Block on Page 2
   if (y + 35 > PAGE_HEIGHT - 15) {
-    doc.addPage();
+    doc.addPage([PAGE_WIDTH, PAGE_HEIGHT], 'portrait');
     y = 25;
   }
 
   doc.setFont('times', 'normal');
   doc.setFontSize(10);
-  doc.text(`${kota}, ${tanggalSurat}`, labCoords.sigSectionCenterX, y, { align: 'center' });
+  // Titimangsa (Nama Kota Dan Tanggal Surat) SELALU diletakkan di posisi kanan
+  doc.text(`${kota}, ${tanggalSurat}`, labCoords.dateRightX, y, { align: 'center' });
   y += 5.5;
   doc.text('Mengetahui,', labCoords.sigSectionCenterX, y, { align: 'center' });
   y += 5.5;
@@ -608,7 +620,7 @@ export function generateLABPDFBlob(
   });
 
   // ================= PAGE 3: LAMPIRAN 2 (PEMASUKAN DAN PENGELUARAN) =================
-  doc.addPage();
+  doc.addPage([PAGE_WIDTH, PAGE_HEIGHT], 'portrait');
   y = drawKopSurat(doc, 10);
 
   // Title
@@ -683,7 +695,8 @@ export function generateLABPDFBlob(
   // Signatures on Page 3
   doc.setFont('times', 'normal');
   doc.setFontSize(10);
-  doc.text(`${kota}, ${tanggalSurat}`, labCoords.sigSectionCenterX, y, { align: 'center' });
+  // Titimangsa (Nama Kota Dan Tanggal Surat) SELALU diletakkan di posisi kanan
+  doc.text(`${kota}, ${tanggalSurat}`, labCoords.dateRightX, y, { align: 'center' });
   y += 5.5;
   doc.text('Mengetahui,', labCoords.sigSectionCenterX, y, { align: 'center' });
   y += 5.5;

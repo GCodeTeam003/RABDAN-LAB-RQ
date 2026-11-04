@@ -397,7 +397,7 @@ export const SignatureConfigModal: React.FC<SignatureConfigModalProps> = ({
               <span>Cara Kerja Koordinat:</span>
             </div>
             <p>
-              Kertas A4 berukuran lebar 210 mm. Nilai X mengukur jarak dari tepi kiri. Jika ingin tanda tangan lebih ke tengah atau ke kiri, kurangi nilai X. Jika ingin lebih tinggi, kurangi nilai Y (geser vertikal).
+              Kertas F4 / Folio berukuran lebar 210 mm x panjang 330 mm. Nilai X mengukur jarak dari tepi kiri (sisi kanan adalah X = 150 mm). Jika ingin tanda tangan lebih ke tengah atau ke kiri, kurangi nilai X. Jika ingin lebih tinggi, kurangi nilai Y (geser vertikal).
             </p>
           </div>
         </div>

@@ -64,3 +64,29 @@ test('generateLABPDFBlob generates valid 3-page PDF blob with transactions', () 
   assert.equal(typeof result.blob.size, 'number');
   assert.ok(result.blob.size > 1000);
 });
+
+test('generateRABPDFBlob formats date with 2-digit day like 04 November 2026', () => {
+  const rabMock: RABRecord = {
+    id: 'rab-today',
+    nomor: '001/YMU/RQ/XI/2026',
+    bulan: 'November',
+    tahun: 2026,
+    tanggal: '2026-11-04',
+    kota: 'Kibang Budi Jaya',
+    ketuaRQ: 'AL MUTAQIN',
+    bendaharaRQ: 'HAMIDAH FAUZIYAH',
+    ketuaYayasan: 'H. AHMAD RIFAI, M.Pd.',
+    total: 8750000,
+    itemCount: 2,
+    items: [
+      { id: '1', rincian: 'Bisyafahah Guru', jumlah: 4500000 },
+      { id: '2', rincian: 'Operasional RQ', jumlah: 4250000 },
+    ],
+    hasLink: true,
+  };
+
+  const result = generateRABPDFBlob(rabMock);
+  assert.ok(result);
+  assert.ok(result.blob);
+  assert.ok(result.blob.size > 1000);
+});

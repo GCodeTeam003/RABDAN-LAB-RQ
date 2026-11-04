@@ -132,18 +132,46 @@ export function formatTanggalIndonesia(isoDateStr: string): string {
 }
 
 /**
- * Format ISO date string (YYYY-MM-DD) to formal letter date format with 2-digit day: 02 November 2026
+ * Format ISO date string or formatted date to formal letter date format with 2-digit day: 04 November 2026
  */
 export function formatTanggalSurat(isoDateStr: string): string {
   if (!isoDateStr) return '';
   try {
-    const parts = isoDateStr.split('-');
-    if (parts.length === 3) {
-      const year = parts[0];
-      const month = parseInt(parts[1], 10) - 1;
-      const day = parts[2].padStart(2, '0');
-      if (month >= 0 && month < BULAN_NAMES.length) {
-        return `${day} ${BULAN_NAMES[month]} ${year}`;
+    const clean = isoDateStr.trim();
+    // Case 1: YYYY-MM-DD or YYYY-M-D
+    if (clean.includes('-')) {
+      const parts = clean.split('-');
+      if (parts.length === 3) {
+        const year = parts[0];
+        const month = parseInt(parts[1], 10) - 1;
+        const day = parts[2].padStart(2, '0');
+        if (month >= 0 && month < BULAN_NAMES.length) {
+          return `${day} ${BULAN_NAMES[month]} ${year}`;
+        }
+      }
+    }
+    // Case 2: DD/MM/YYYY or D/M/YYYY
+    if (clean.includes('/')) {
+      const parts = clean.split('/');
+      if (parts.length === 3) {
+        const day = parts[0].padStart(2, '0');
+        const month = parseInt(parts[1], 10) - 1;
+        const year = parts[2];
+        if (month >= 0 && month < BULAN_NAMES.length) {
+          return `${day} ${BULAN_NAMES[month]} ${year}`;
+        }
+      }
+    }
+    // Case 3: Text like "4 November 2026" -> ensure 2-digit day "04 November 2026"
+    const words = clean.split(/\s+/);
+    if (words.length === 3) {
+      const dayNum = parseInt(words[0], 10);
+      if (!isNaN(dayNum) && dayNum >= 1 && dayNum <= 31) {
+        const day = String(dayNum).padStart(2, '0');
+        const mIdx = BULAN_NAMES.findIndex((b) => b.toLowerCase() === words[1].toLowerCase());
+        if (mIdx >= 0) {
+          return `${day} ${BULAN_NAMES[mIdx]} ${words[2]}`;
+        }
       }
     }
   } catch (e) {
