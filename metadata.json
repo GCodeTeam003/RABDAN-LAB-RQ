@@ -1,5 +1,5 @@
 {
-  "name": "RAB & LAB — RQ Ulul Azmi",
+  "name": "FIA Finance Instansi Azmi",
   "description": "Aplikasi Manajemen RAB (Rencana Anggaran Biaya), LAB (Laporan Anggaran Bulanan), dan Transaksi Keuangan dengan database Google Sheets.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
