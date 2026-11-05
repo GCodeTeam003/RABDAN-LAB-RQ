@@ -1,6 +1,7 @@
 import { jsPDF } from 'jspdf';
 import { LABRecord, RABRecord, TransaksiRecord } from '../types';
 import { LOGO_RQ_BASE64 } from './logoBase64';
+import { KOP_SURAT_BASE64 } from './kopSuratBase64';
 
 // Helper to format currency exactly as in sample PDFs
 function formatCurrency(amount: number, withDecimals = false): string {
@@ -63,9 +64,25 @@ function getArabicHeaderDataURL(): string {
 
 /**
  * Draws the official standardized Kop Surat of Rumah Qur'an Ulul Azmi
- * exactly as structured in the reference PDF files.
+ * using the newly uploaded official Kop image.
  */
 function drawOfficialKopSurat(doc: jsPDF): number {
+  const kopX = 15;
+  const kopY = 10;
+  const kopW = 180;
+  // Aspect ratio is 4999 / 930 = 5.3752688
+  const kopH = kopW / 5.3752688; // ~33.486 mm
+
+  try {
+    if (KOP_SURAT_BASE64) {
+      doc.addImage(KOP_SURAT_BASE64, 'JPEG', kopX, kopY, kopW, kopH);
+      return kopY + kopH + 3.5; // ~47 mm
+    }
+  } catch (e) {
+    console.warn('Could not add official kop surat image to PDF:', e);
+  }
+
+  // Fallback to manual vector rendering if image is unavailable
   const leftX = 20;
   const rightX = 190;
   const logoX = 94.5;
@@ -98,15 +115,6 @@ function drawOfficialKopSurat(doc: jsPDF): number {
     const arabicImg = getArabicHeaderDataURL();
     if (arabicImg) {
       doc.addImage(arabicImg, 'PNG', 128, 10, 62, 22);
-    } else {
-      // Fallback text if canvas unavailable
-      doc.setFont('times', 'bold');
-      doc.setFontSize(11);
-      doc.text('BAITUL QURAN ULUL AZMI', rightX, 17, { align: 'right' });
-      doc.setFont('times', 'normal');
-      doc.setFontSize(9);
-      doc.text('Unit VI, Kibang Budi Jaya, Lambu Kibang', rightX, 22.5, { align: 'right' });
-      doc.text('Tulang Bawang Barat 34388 Lampung', rightX, 27.5, { align: 'right' });
     }
   } catch (e) {
     console.warn('Arabic header render notice:', e);
@@ -121,7 +129,7 @@ function drawOfficialKopSurat(doc: jsPDF): number {
   doc.setLineWidth(0.25);
   doc.line(leftX, lineY + 1.2, rightX, lineY + 1.2);
 
-  return lineY + 8; // Return start Y for content
+  return lineY + 8;
 }
 
 /**
