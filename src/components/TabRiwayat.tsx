@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { LABRecord, RABRecord, TransaksiRecord } from '../types';
 import { formatRupiah, formatTanggalIndonesia } from '../utils/formatters';
 import { generateLABPDFBlob, generateRABPDFBlob } from '../services/pdfGenerator';
-import { RefreshCw, FileText, ExternalLink, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
+import { RefreshCw, FileText, ExternalLink, Trash2, ChevronDown, ChevronUp, Edit3 } from 'lucide-react';
 
 interface TabRiwayatProps {
   labList: LABRecord[];
@@ -13,6 +13,8 @@ interface TabRiwayatProps {
   onNotify: (msg: string, type?: 'success' | 'error') => void;
   onRequestDeleteLAB: (lab: LABRecord) => void;
   onRequestDeleteRAB: (rab: RABRecord) => void;
+  onEditTransaksi?: (trx: TransaksiRecord) => void;
+  onRequestDeleteTransaksi?: (trx: TransaksiRecord) => void;
 }
 
 export const TabRiwayat: React.FC<TabRiwayatProps> = ({
@@ -24,6 +26,8 @@ export const TabRiwayat: React.FC<TabRiwayatProps> = ({
   onNotify,
   onRequestDeleteLAB,
   onRequestDeleteRAB,
+  onEditTransaksi,
+  onRequestDeleteTransaksi,
 }) => {
   const [activeSegment, setActiveSegment] = useState<'rab' | 'lab'>('rab');
   const [generatingId, setGeneratingId] = useState<string | null>(null);
@@ -289,19 +293,41 @@ export const TabRiwayat: React.FC<TabRiwayatProps> = ({
                         </p>
                       ) : (
                         matchingTrx.map((trx, idx) => (
-                          <div key={trx.id || idx} className="flex justify-between py-1 border-b border-slate-50">
-                            <div>
-                              <span className="font-medium text-slate-800">{trx.keterangan}</span>
+                          <div key={trx.id || idx} className="flex items-center justify-between py-1.5 border-b border-slate-50 gap-2">
+                            <div className="min-w-0 pr-1">
+                              <span className="font-medium text-slate-800 block truncate">{trx.keterangan}</span>
                               <span className="text-[10px] text-slate-400 block">
                                 {formatTanggalIndonesia(trx.tanggal)}
                               </span>
                             </div>
-                            <div className="text-right">
-                              {trx.masuk > 0 && (
-                                <span className="font-bold text-emerald-600">+{formatRupiah(trx.masuk)}</span>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <div className="text-right">
+                                {trx.masuk > 0 && (
+                                  <span className="font-bold text-emerald-600 block">+{formatRupiah(trx.masuk)}</span>
+                                )}
+                                {trx.keluar > 0 && (
+                                  <span className="font-bold text-rose-600 block">-{formatRupiah(trx.keluar)}</span>
+                                )}
+                              </div>
+                              {onEditTransaksi && (
+                                <button
+                                  type="button"
+                                  onClick={() => onEditTransaksi(trx)}
+                                  className="p-1 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded transition-colors cursor-pointer"
+                                  title="Edit transaksi"
+                                >
+                                  <Edit3 className="w-3.5 h-3.5" />
+                                </button>
                               )}
-                              {trx.keluar > 0 && (
-                                <span className="font-bold text-rose-600">-{formatRupiah(trx.keluar)}</span>
+                              {onRequestDeleteTransaksi && (
+                                <button
+                                  type="button"
+                                  onClick={() => onRequestDeleteTransaksi(trx)}
+                                  className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors cursor-pointer"
+                                  title="Hapus transaksi"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
                               )}
                             </div>
                           </div>

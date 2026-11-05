@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { LABRecord, TransaksiRecord } from '../types';
 import { formatRupiah, formatTanggalIndonesia } from '../utils/formatters';
 import { generateLABPDFBlob } from '../services/pdfGenerator';
-import { FileText, ExternalLink, Trash2, ArrowDownLeft, ArrowUpRight } from 'lucide-react';
+import { FileText, ExternalLink, Trash2, ArrowDownLeft, ArrowUpRight, Edit3 } from 'lucide-react';
 
 interface TabTransaksiProps {
   labList: LABRecord[];
@@ -16,6 +16,7 @@ interface TabTransaksiProps {
   }) => Promise<{ idLAB: string; updatedLAB?: LABRecord }>;
   onNotify: (msg: string, type?: 'success' | 'error') => void;
   onRequestDelete: (trx: TransaksiRecord) => void;
+  onEditTransaksi: (trx: TransaksiRecord) => void;
 }
 
 export const TabTransaksi: React.FC<TabTransaksiProps> = ({
@@ -24,6 +25,7 @@ export const TabTransaksi: React.FC<TabTransaksiProps> = ({
   onSubmitTransaksi,
   onNotify,
   onRequestDelete,
+  onEditTransaksi,
 }) => {
   const [selectedLabId, setSelectedLabId] = useState<string>('');
   const [tanggal, setTanggal] = useState<string>('');
@@ -324,8 +326,16 @@ export const TabTransaksi: React.FC<TabTransaksiProps> = ({
                     )}
                     <button
                       type="button"
+                      onClick={() => onEditTransaksi(t)}
+                      className="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors min-w-[32px] min-h-[32px] flex items-center justify-center cursor-pointer"
+                      title="Edit transaksi"
+                    >
+                      <Edit3 className="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => onRequestDelete(t)}
-                      className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors min-w-[32px] min-h-[32px] flex items-center justify-center"
+                      className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors min-w-[32px] min-h-[32px] flex items-center justify-center cursor-pointer"
                       title="Hapus transaksi"
                     >
                       <Trash2 className="w-4 h-4" />

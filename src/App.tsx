@@ -9,15 +9,18 @@ import { TabRiwayat } from './components/TabRiwayat';
 import { SheetConfigModal } from './components/SheetConfigModal';
 import { ConfirmModal } from './components/ConfirmModal';
 import { UnauthorizedDomainModal } from './components/UnauthorizedDomainModal';
+import { EditTransaksiModal } from './components/EditTransaksiModal';
 import { LABRecord, RABRecord, TransaksiRecord } from './types';
 import {
   fetchSharedData,
   persistLAB,
   persistRAB,
   persistTransaksi,
+  updateExistingTransaksi,
   deleteLocalTransaksi,
   deleteLocalLAB,
   deleteLocalRAB,
+  clearAllData,
 } from './services/storage';
 import { initAuth, googleSignIn, logout } from './services/auth';
 import { appendRowToSheet, SHEET_ID_KEY, extractSpreadsheetId } from './services/sheets';
@@ -45,6 +48,8 @@ export default function App() {
   const [labList, setLabList] = useState<LABRecord[]>([]);
   const [rabList, setRabList] = useState<RABRecord[]>([]);
   const [transaksiList, setTransaksiList] = useState<TransaksiRecord[]>([]);
+  const [editingTrx, setEditingTrx] = useState<TransaksiRecord | null>(null);
+  const [isEditModalOpen, setIsEditModalOpen] = useState<boolean>(false);
 
   // Toast Notification
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' | 'info'; show: boolean }>({
@@ -352,6 +357,34 @@ export default function App() {
     });
   };
 
+  const handleEditTransaksi = (trx: TransaksiRecord) => {
+    setEditingTrx(trx);
+    setIsEditModalOpen(true);
+  };
+
+  const handleSaveEditTransaksi = async (updatedTrx: TransaksiRecord) => {
+    await updateExistingTransaksi(updatedTrx);
+    await loadSharedData(true);
+    showToast('Transaksi berhasil diperbarui', 'success');
+  };
+
+  const handleResetDatabase = () => {
+    setConfirmModal({
+      isOpen: true,
+      title: 'Kosongkan Semua Data Contoh?',
+      message:
+        'PERINGATAN: Tindakan ini akan mengosongkan seluruh data demo (LAB, RAB, Transaksi) di server dan Firestore. Gunakan ini jika Anda ingin memulai pencatatan dari data yang benar-benar kosong.',
+      onConfirm: async () => {
+        await clearAllData();
+        setLabList([]);
+        setRabList([]);
+        setTransaksiList([]);
+        setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+        showToast('Semua data contoh berhasil dikosongkan. Database siap digunakan!', 'success');
+      },
+    });
+  };
+
   return (
     <div className="min-h-screen bg-slate-100 text-slate-800 antialiased font-sans p-3 sm:p-6 pb-24 sm:pb-8 flex flex-col justify-between">
       <div className="max-w-xl mx-auto w-full">
@@ -424,6 +457,7 @@ export default function App() {
               transaksiList={transaksiList}
               onSubmitTransaksi={handleSubmitTransaksi}
               onRequestDelete={handleRequestDeleteTransaksi}
+              onEditTransaksi={handleEditTransaksi}
               onNotify={showToast}
             />
           )}
@@ -455,6 +489,8 @@ export default function App() {
               onNotify={showToast}
               onRequestDeleteLAB={handleRequestDeleteLAB}
               onRequestDeleteRAB={handleRequestDeleteRAB}
+              onEditTransaksi={handleEditTransaksi}
+              onRequestDeleteTransaksi={handleRequestDeleteTransaksi}
             />
           )}
         </main>
@@ -495,6 +531,7 @@ export default function App() {
         rabList={rabList}
         onOpenUnauthorizedDomainGuide={() => setIsUnauthorizedModalOpen(true)}
         initialTab={sheetModalInitialTab}
+        onResetData={handleResetDatabase}
       />
 
       <ConfirmModal
@@ -513,6 +550,18 @@ export default function App() {
           setSheetModalInitialTab('webhook');
           setIsSheetModalOpen(true);
         }}
+      />
+
+      <EditTransaksiModal
+        isOpen={isEditModalOpen}
+        onClose={() => {
+          setIsEditModalOpen(false);
+          setEditingTrx(null);
+        }}
+        trx={editingTrx}
+        labList={labList}
+        onSave={handleSaveEditTransaksi}
+        onNotify={showToast}
       />
 
       {/* Floating Toast Notification */}

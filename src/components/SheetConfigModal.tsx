@@ -16,6 +16,7 @@ import {
   Code2,
   Database,
   ShieldAlert,
+  Trash2,
 } from 'lucide-react';
 import { updateSheetConfig } from '../services/storage';
 import {
@@ -46,6 +47,7 @@ interface SheetConfigModalProps {
   rabList: RABRecord[];
   onOpenUnauthorizedDomainGuide?: () => void;
   initialTab?: 'direct' | 'webhook' | 'backup';
+  onResetData?: () => void;
 }
 
 export const SheetConfigModal: React.FC<SheetConfigModalProps> = ({
@@ -68,6 +70,7 @@ export const SheetConfigModal: React.FC<SheetConfigModalProps> = ({
   rabList,
   onOpenUnauthorizedDomainGuide,
   initialTab = 'webhook',
+  onResetData,
 }) => {
   const [webAppUrl, setWebAppUrl] = useState(initialWebAppUrl);
   const [inputSheetId, setInputSheetId] = useState(spreadsheetId);
@@ -662,29 +665,46 @@ function doPost(e) {
         </div>
 
         {/* Footer */}
-        <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
-          <button
-            type="button"
-            onClick={async () => {
-              setIsSyncing(true);
-              try {
-                await onSync();
-                onNotify('Data berhasil diperbarui dari database pusat!', 'success');
-              } finally {
-                setIsSyncing(false);
-              }
-            }}
-            disabled={isSyncing}
-            className="text-xs font-semibold text-slate-600 hover:text-slate-800 flex items-center gap-1"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
-            <span>Muat Ulang Server</span>
-          </button>
+        <div className="pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={async () => {
+                setIsSyncing(true);
+                try {
+                  await onSync();
+                  onNotify('Data berhasil diperbarui dari database pusat!', 'success');
+                } finally {
+                  setIsSyncing(false);
+                }
+              }}
+              disabled={isSyncing}
+              className="text-xs font-semibold text-slate-600 hover:text-slate-800 flex items-center gap-1 cursor-pointer"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
+              <span>Muat Ulang Server</span>
+            </button>
+
+            {onResetData && (
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  onResetData();
+                }}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-semibold cursor-pointer transition-colors"
+                title="Hapus semua data contoh dan bersihkan database"
+              >
+                <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                <span>Kosongkan Data Contoh</span>
+              </button>
+            )}
+          </div>
 
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl text-xs sm:text-sm transition-colors"
+            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl text-xs sm:text-sm transition-colors cursor-pointer"
           >
             Tutup
           </button>

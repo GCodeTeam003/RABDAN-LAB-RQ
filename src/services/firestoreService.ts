@@ -202,3 +202,25 @@ export async function deleteFirestoreRAB(id: string): Promise<void> {
     handleFirestoreError(err, OperationType.DELETE, `${RAB_COLLECTION}/${id}`);
   }
 }
+
+/**
+ * Clear all records from Firestore collections (used for resetting database to clean state)
+ */
+export async function clearFirestoreAllData(): Promise<void> {
+  try {
+    const [labSnap, rabSnap, trxSnap] = await Promise.all([
+      getDocs(collection(db, LAB_COLLECTION)),
+      getDocs(collection(db, RAB_COLLECTION)),
+      getDocs(collection(db, TRANSAKSI_COLLECTION)),
+    ]);
+
+    const deletes: Promise<void>[] = [];
+    labSnap.docs.forEach((d) => deletes.push(deleteDoc(d.ref)));
+    rabSnap.docs.forEach((d) => deletes.push(deleteDoc(d.ref)));
+    trxSnap.docs.forEach((d) => deletes.push(deleteDoc(d.ref)));
+
+    await Promise.all(deletes);
+  } catch (err) {
+    console.warn('Failed clearing Firestore:', err);
+  }
+}

@@ -7,6 +7,7 @@ import {
   deleteFirestoreLAB,
   deleteFirestoreRAB,
   deleteFirestoreTransaksi,
+  clearFirestoreAllData,
 } from './firestoreService';
 
 const STORAGE_LAB_KEY = 'rq_ulul_azmi_lab_master_v1';
@@ -152,6 +153,41 @@ export async function persistTransaksi(
   const local = getLocalData();
   const updatedTrx = [trx, ...local.transaksiList];
   saveLocalData(local.labList, local.rabList, updatedTrx);
+  return { ok: true, syncedToSheets: false };
+}
+
+/**
+ * Updates an existing transaction in Cloud Firestore and central server
+ */
+export async function updateExistingTransaksi(
+  trx: TransaksiRecord
+): Promise<{ ok: boolean; syncedToSheets: boolean; updatedLAB?: LABRecord }> {
+  // 1. Update in Cloud Firestore
+  try {
+    await saveFirestoreTransaksi(trx);
+  } catch (err) {
+    console.warn('Failed updating Firestore directly:', err);
+  }
+
+  // 2. Update via server PUT
+  try {
+    const res = await fetch(`/api/transaksi/${trx.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(trx),
+    });
+    if (res.ok) {
+      const json = await res.json();
+      return { ok: true, syncedToSheets: true, updatedLAB: json.updatedLAB };
+    }
+  } catch (err) {
+    console.error('Error updating transaksi on server:', err);
+  }
+
+  // Local fallback
+  const local = getLocalData();
+  const updatedList = local.transaksiList.map((t) => (t.id === trx.id ? trx : t));
+  saveLocalData(local.labList, local.rabList, updatedList);
   return { ok: true, syncedToSheets: false };
 }
 
@@ -308,4 +344,28 @@ export async function updateSheetConfig(config: {
   } catch (e) {
     return false;
   }
+}
+
+/**
+ * Resets all data in Cloud Firestore, server DB, and local cache
+ */
+export async function clearAllData(): Promise<boolean> {
+  try {
+    await clearFirestoreAllData();
+  } catch (err) {
+    console.warn('Failed clearing Firestore:', err);
+  }
+
+  try {
+    const res = await fetch('/api/reset-data', { method: 'POST' });
+    if (res.ok) {
+      saveLocalData([], [], []);
+      return true;
+    }
+  } catch (err) {
+    console.error('Error calling /api/reset-data:', err);
+  }
+
+  saveLocalData([], [], []);
+  return true;
 }

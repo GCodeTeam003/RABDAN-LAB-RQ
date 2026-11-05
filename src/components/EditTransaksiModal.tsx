@@ -1,28 +1,26 @@
 import React, { useState, useEffect } from 'react';
-import { LABRecord, TransaksiRecord } from '../types';
+import { TransaksiRecord, LABRecord } from '../types';
+import { X, Check, ArrowDownLeft, ArrowUpRight, Edit3, Calendar, FileText, Tag, DollarSign } from 'lucide-react';
 import { formatRupiah } from '../utils/formatters';
-import { X, ArrowDownLeft, ArrowUpRight, Trash2, Check, AlertCircle } from 'lucide-react';
 
 interface EditTransaksiModalProps {
   isOpen: boolean;
   onClose: () => void;
-  transaksi: TransaksiRecord | null;
+  trx: TransaksiRecord | null;
   labList: LABRecord[];
   onSave: (updatedTrx: TransaksiRecord) => Promise<void>;
-  onDelete?: (trx: TransaksiRecord) => void;
-  onNotify: (msg: string, type?: 'success' | 'error' | 'info') => void;
+  onNotify: (msg: string, type?: 'success' | 'error') => void;
 }
 
 export const EditTransaksiModal: React.FC<EditTransaksiModalProps> = ({
   isOpen,
   onClose,
-  transaksi,
+  trx,
   labList,
   onSave,
-  onDelete,
   onNotify,
 }) => {
-  const [selectedLabId, setSelectedLabId] = useState<string>('');
+  const [idLAB, setIdLAB] = useState<string>('');
   const [tanggal, setTanggal] = useState<string>('');
   const [keterangan, setKeterangan] = useState<string>('');
   const [trxType, setTrxType] = useState<'masuk' | 'keluar'>('masuk');
@@ -30,28 +28,27 @@ export const EditTransaksiModal: React.FC<EditTransaksiModalProps> = ({
   const [isSaving, setIsSaving] = useState<boolean>(false);
 
   useEffect(() => {
-    if (transaksi) {
-      setSelectedLabId(transaksi.idLAB || (labList.length > 0 ? labList[0].id : ''));
-      setTanggal(transaksi.tanggal || new Date().toISOString().split('T')[0]);
-      setKeterangan(transaksi.keterangan || '');
-      const isMasuk = Number(transaksi.masuk) > 0;
+    if (trx) {
+      setIdLAB(trx.idLAB);
+      setTanggal(trx.tanggal);
+      setKeterangan(trx.keterangan);
+      const isMasuk = Number(trx.masuk) > 0;
       setTrxType(isMasuk ? 'masuk' : 'keluar');
-      const nom = isMasuk ? transaksi.masuk : transaksi.keluar;
-      setNominal(String(nom || ''));
+      setNominal(String(isMasuk ? trx.masuk : trx.keluar));
     }
-  }, [transaksi, labList]);
+  }, [trx, isOpen]);
 
-  if (!isOpen || !transaksi) return null;
+  if (!isOpen || !trx) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedLabId) {
+    if (!idLAB) {
       onNotify('Silakan pilih Bulan LAB', 'error');
       return;
     }
     const valNominal = Number(nominal) || 0;
     if (valNominal <= 0) {
-      onNotify('Nominal transaksi harus lebih dari 0', 'error');
+      onNotify('Masukkan nominal yang valid', 'error');
       return;
     }
     if (!keterangan.trim()) {
@@ -59,204 +56,179 @@ export const EditTransaksiModal: React.FC<EditTransaksiModalProps> = ({
       return;
     }
 
-    const updated: TransaksiRecord = {
-      ...transaksi,
-      idLAB: selectedLabId,
-      tanggal,
-      keterangan: keterangan.trim(),
-      masuk: trxType === 'masuk' ? valNominal : 0,
-      keluar: trxType === 'keluar' ? valNominal : 0,
-    };
-
     setIsSaving(true);
     try {
-      await onSave(updated);
-      onNotify('✅ Perubahan transaksi berhasil disimpan!', 'success');
+      const updatedRecord: TransaksiRecord = {
+        ...trx,
+        idLAB,
+        tanggal,
+        keterangan: keterangan.trim(),
+        masuk: trxType === 'masuk' ? valNominal : 0,
+        keluar: trxType === 'keluar' ? valNominal : 0,
+      };
+
+      await onSave(updatedRecord);
+      onNotify('Transaksi berhasil diperbarui!', 'success');
       onClose();
     } catch (err: any) {
-      onNotify('Gagal menyimpan transaksi: ' + (err.message || 'Error'), 'error');
+      onNotify('Gagal menyimpan perubahan: ' + (err.message || ''), 'error');
     } finally {
       setIsSaving(false);
     }
   };
 
-  const parsedNominal = Number(nominal) || 0;
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
-      <div
-        className="w-full max-w-lg bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden flex flex-col max-h-[90vh]"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Modal Header */}
-        <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/80">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto">
+      <div className="bg-white rounded-2xl max-w-md w-full p-5 sm:p-6 shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 duration-150 my-auto">
+        {/* Header */}
+        <div className="flex items-center justify-between pb-3 border-b border-slate-200">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold text-sm">
-              ✏️
+            <div className="w-8 h-8 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center font-bold">
+              <Edit3 className="w-4 h-4 text-amber-600" />
             </div>
             <div>
-              <h2 className="text-base font-bold text-slate-800">Edit Transaksi</h2>
-              <p className="text-xs text-slate-500">Perbaiki keterangan, tanggal, atau nominal transaksi</p>
+              <h3 className="text-base font-bold text-slate-900">Edit Data Transaksi</h3>
+              <p className="text-[11px] text-slate-500 font-mono">ID: {trx.id}</p>
             </div>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-200/50 transition-colors cursor-pointer"
-            title="Tutup"
+            className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Modal Body Form */}
-        <form onSubmit={handleSubmit} className="p-5 space-y-4 overflow-y-auto">
-          {/* Pilih Bulan LAB */}
+        {/* Form */}
+        <form onSubmit={handleSubmit} className="mt-4 space-y-3.5">
+          {/* Target Bulan LAB */}
           <div className="space-y-1">
-            <label className="flex items-center gap-1.5 text-xs font-bold text-slate-700">
-              <span>Bulan LAB</span>
-              <span className="text-rose-500">*</span>
+            <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+              <Calendar className="w-3.5 h-3.5 text-emerald-600" />
+              Bulan Laporan (LAB)
             </label>
             <select
-              value={selectedLabId}
-              onChange={(e) => setSelectedLabId(e.target.value)}
+              value={idLAB}
+              onChange={(e) => setIdLAB(e.target.value)}
+              className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 bg-white focus:outline-none focus:border-emerald-500"
               required
-              className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm bg-white focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
             >
-              {labList.map((l) => (
-                <option key={l.id} value={l.id}>
-                  {l.bulan} {l.tahun} ({l.nomor})
+              <option value="">-- Pilih Bulan LAB --</option>
+              {labList.map((lab) => (
+                <option key={lab.id} value={lab.id}>
+                  {lab.bulan} {lab.tahun} — ({lab.nomor})
                 </option>
               ))}
             </select>
           </div>
 
-          {/* Tanggal Transaksi */}
+          {/* Tanggal */}
           <div className="space-y-1">
-            <label className="flex items-center gap-1.5 text-xs font-bold text-slate-700">
-              <span>Tanggal Transaksi</span>
-              <span className="text-rose-500">*</span>
+            <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+              <Calendar className="w-3.5 h-3.5 text-slate-500" />
+              Tanggal Transaksi
             </label>
             <input
               type="date"
               value={tanggal}
               onChange={(e) => setTanggal(e.target.value)}
+              className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 bg-white focus:outline-none focus:border-emerald-500"
               required
-              className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm bg-white focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
-            />
+            >
+            </input>
           </div>
 
-          {/* Keterangan */}
+          {/* Jenis Transaksi (Masuk / Keluar) */}
           <div className="space-y-1">
-            <label className="flex items-center gap-1.5 text-xs font-bold text-slate-700">
-              <span>Keterangan Transaksi</span>
-              <span className="text-rose-500">*</span>
+            <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+              <Tag className="w-3.5 h-3.5 text-slate-500" />
+              Jenis Arus Kas
             </label>
-            <input
-              type="text"
-              value={keterangan}
-              onChange={(e) => setKeterangan(e.target.value)}
-              placeholder="Contoh: Belanja Operasional Santri"
-              required
-              className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm bg-white focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
-            />
-          </div>
-
-          {/* Jenis & Nominal */}
-          <div className="space-y-2">
-            <label className="text-xs font-bold text-slate-700 block">
-              Jenis &amp; Jumlah Arus Kas
-            </label>
-            <div className="grid grid-cols-2 gap-2 p-1 bg-slate-100 rounded-xl">
+            <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
                 onClick={() => setTrxType('masuk')}
-                className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-xs font-bold transition-all ${
+                className={`py-2 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
                   trxType === 'masuk'
-                    ? 'bg-emerald-600 text-white shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
+                    ? 'border-emerald-500 bg-emerald-50 text-emerald-800 shadow-2xs'
+                    : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
                 }`}
               >
-                <ArrowDownLeft className="w-3.5 h-3.5" />
-                <span>Kas Masuk (+)</span>
+                <ArrowDownLeft className="w-4 h-4 text-emerald-600" />
+                <span>Pemasukan</span>
               </button>
               <button
                 type="button"
                 onClick={() => setTrxType('keluar')}
-                className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-xs font-bold transition-all ${
+                className={`py-2 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
                   trxType === 'keluar'
-                    ? 'bg-rose-600 text-white shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
+                    ? 'border-rose-500 bg-rose-50 text-rose-800 shadow-2xs'
+                    : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
                 }`}
               >
-                <ArrowUpRight className="w-3.5 h-3.5" />
-                <span>Kas Keluar (-)</span>
+                <ArrowUpRight className="w-4 h-4 text-rose-600" />
+                <span>Pengeluaran</span>
               </button>
             </div>
+          </div>
 
-            <div className="relative">
-              <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-400">
-                Rp
-              </span>
-              <input
-                type="number"
-                value={nominal}
-                onChange={(e) => setNominal(e.target.value)}
-                placeholder="0"
-                min="1"
-                required
-                className="w-full pl-11 pr-3.5 py-2.5 rounded-xl border border-slate-300 text-base font-bold bg-white focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
-              />
-            </div>
-            {parsedNominal > 0 && (
-              <p className="text-[11px] text-slate-500 font-medium">
-                Terbaca: <span className="font-bold text-slate-700">{formatRupiah(parsedNominal)}</span>
+          {/* Nominal */}
+          <div className="space-y-1">
+            <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+              <DollarSign className="w-3.5 h-3.5 text-slate-500" />
+              Nominal (Rp)
+            </label>
+            <input
+              type="number"
+              min="1"
+              value={nominal}
+              onChange={(e) => setNominal(e.target.value)}
+              placeholder="Contoh: 150000"
+              className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 font-mono font-semibold bg-white focus:outline-none focus:border-emerald-500"
+              required
+            />
+            {Number(nominal) > 0 && (
+              <p className="text-[11px] font-semibold text-emerald-700">
+                Terbaca: {formatRupiah(Number(nominal))}
               </p>
             )}
           </div>
 
-          {/* Info note */}
-          <div className="p-3 rounded-xl bg-amber-50 border border-amber-200/80 text-amber-900 text-xs flex items-start gap-2">
-            <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-            <p>
-              Mengubah transaksi akan otomatis menghitung ulang saldo kas pada Bulan LAB terkait dan menyinkronkan data ke Cloud Database &amp; Google Spreadsheet.
-            </p>
+          {/* Keterangan */}
+          <div className="space-y-1">
+            <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+              <FileText className="w-3.5 h-3.5 text-slate-500" />
+              Keterangan / Uraian
+            </label>
+            <textarea
+              rows={2}
+              value={keterangan}
+              onChange={(e) => setKeterangan(e.target.value)}
+              placeholder="Rincian keterangan transaksi..."
+              className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 bg-white focus:outline-none focus:border-emerald-500"
+              required
+            />
           </div>
 
-          {/* Modal Actions */}
-          <div className="pt-2 flex items-center justify-between gap-2 border-t border-slate-100">
-            {onDelete ? (
-              <button
-                type="button"
-                onClick={() => {
-                  onClose();
-                  onDelete(transaksi);
-                }}
-                className="inline-flex items-center gap-1 px-3 py-2 text-xs font-bold text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                <span>Hapus</span>
-              </button>
-            ) : <div />}
-
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={onClose}
-                disabled={isSaving}
-                className="px-4 py-2 text-xs font-bold text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
-              >
-                Batal
-              </button>
-              <button
-                type="submit"
-                disabled={isSaving}
-                className="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-xs transition-colors disabled:opacity-50 cursor-pointer"
-              >
-                <Check className="w-3.5 h-3.5" />
-                <span>{isSaving ? 'Menyimpan...' : 'Simpan Perubahan'}</span>
-              </button>
-            </div>
+          {/* Action Buttons */}
+          <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-200">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={isSaving}
+              className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition-colors cursor-pointer disabled:opacity-50"
+            >
+              Batal
+            </button>
+            <button
+              type="submit"
+              disabled={isSaving}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs transition-colors cursor-pointer disabled:opacity-50"
+            >
+              <Check className="w-3.5 h-3.5" />
+              <span>{isSaving ? 'Menyimpan...' : 'Simpan Perubahan'}</span>
+            </button>
           </div>
         </form>
       </div>

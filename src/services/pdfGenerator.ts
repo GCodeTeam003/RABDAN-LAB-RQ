@@ -1,157 +1,135 @@
 import { jsPDF } from 'jspdf';
 import { LABRecord, RABRecord, TransaksiRecord } from '../types';
-import { formatRupiah, formatTanggalIndonesia } from '../utils/formatters';
+import { LOGO_RQ_BASE64 } from './logoBase64';
 
-export function generateRABPDFBlob(rab: RABRecord): { blob: Blob; url: string } {
-  const doc = new jsPDF({
-    orientation: 'portrait',
-    unit: 'mm',
-    format: 'a4',
-  });
-
-  const pageWidth = doc.internal.pageSize.getWidth();
-  let y = 18;
-
-  // Header / Kop Surat
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(11);
-  doc.setTextColor(40, 40, 40);
-  doc.text('FIA — FINANCE INSTANSI AZMI', pageWidth / 2, y, { align: 'center' });
-  y += 5.5;
-
-  doc.setFontSize(14);
-  doc.text('YAYASAN MISYKATUL UMMAH (YMU)', pageWidth / 2, y, { align: 'center' });
-  y += 6;
-
-  doc.setFontSize(15);
-  doc.setTextColor(39, 174, 96); // Forest Green
-  doc.text("RUMAH QUR'AN ULUL AZMI", pageWidth / 2, y, { align: 'center' });
-  y += 5;
-
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(9);
-  doc.setTextColor(80, 80, 80);
-  doc.text('Sekretariat: Kibang Budi Jaya, Lambu Kibang, Tulang Bawang Barat, Lampung', pageWidth / 2, y, { align: 'center' });
-  y += 4;
-
-  // Header decorative line
-  doc.setDrawColor(39, 174, 96);
-  doc.setLineWidth(0.8);
-  doc.line(15, y, pageWidth - 15, y);
-  y += 1.2;
-  doc.setDrawColor(180, 180, 180);
-  doc.setLineWidth(0.3);
-  doc.line(15, y, pageWidth - 15, y);
-  y += 8;
-
-  // Document Title
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(13);
-  doc.setTextColor(40, 40, 40);
-  doc.text('RENCANA ANGGARAN BIAYA (RAB)', pageWidth / 2, y, { align: 'center' });
-  y += 5;
-
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(10);
-  doc.setTextColor(100, 100, 100);
-  doc.text(`Nomor: ${rab.nomor}`, pageWidth / 2, y, { align: 'center' });
-  y += 5;
-  doc.text(`Periode: Bulan ${rab.bulan} ${rab.tahun}`, pageWidth / 2, y, { align: 'center' });
-  y += 9;
-
-  // Items Table Header
-  const colX = [18, 30, 140, 192];
-  doc.setFillColor(245, 247, 250);
-  doc.rect(colX[0], y, colX[3] - colX[0], 8, 'F');
-  doc.setDrawColor(200, 200, 200);
-  doc.setLineWidth(0.2);
-  doc.rect(colX[0], y, colX[3] - colX[0], 8, 'S');
-
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(9.5);
-  doc.setTextColor(30, 30, 30);
-  doc.text('NO', (colX[0] + colX[1]) / 2, y + 5.5, { align: 'center' });
-  doc.text('RINCIAN KEBUTUHAN', colX[1] + 3, y + 5.5);
-  doc.text('JUMLAH (RP)', colX[3] - 3, y + 5.5, { align: 'right' });
-  y += 8;
-
-  // Item Rows
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(9);
-  doc.setTextColor(40, 40, 40);
-
-  rab.items.forEach((item, index) => {
-    const rowHeight = 7.5;
-    // alternating background
-    if (index % 2 === 1) {
-      doc.setFillColor(252, 253, 254);
-      doc.rect(colX[0], y, colX[3] - colX[0], rowHeight, 'F');
-    }
-    doc.setDrawColor(220, 220, 220);
-    doc.line(colX[0], y + rowHeight, colX[3], y + rowHeight);
-
-    doc.text(String(index + 1), (colX[0] + colX[1]) / 2, y + 5, { align: 'center' });
-    doc.text(item.rincian || '-', colX[1] + 3, y + 5);
-    doc.text(formatRupiah(item.jumlah), colX[3] - 3, y + 5, { align: 'right' });
-
-    y += rowHeight;
-  });
-
-  // Total Row
-  y += 1;
-  doc.setFillColor(235, 247, 238);
-  doc.rect(colX[0], y, colX[3] - colX[0], 9, 'F');
-  doc.setDrawColor(39, 174, 96);
-  doc.setLineWidth(0.4);
-  doc.rect(colX[0], y, colX[3] - colX[0], 9, 'S');
-
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(10);
-  doc.setTextColor(30, 30, 30);
-  doc.text('TOTAL ANGGARAN', colX[1] + 3, y + 6);
-  doc.setTextColor(39, 174, 96);
-  doc.text(formatRupiah(rab.total), colX[3] - 3, y + 6, { align: 'right' });
-
-  y += 18;
-
-  // City and Date
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(9.5);
-  doc.setTextColor(40, 40, 40);
-  doc.text(`${rab.kota || 'Kibang Budi Jaya'}, ${formatTanggalIndonesia(rab.tanggal)}`, colX[3], y, { align: 'right' });
-  y += 8;
-
-  // 3-Column Signatures
-  const sigColWidth = (colX[3] - colX[0]) / 3;
-  const col1X = colX[0] + sigColWidth * 0.5;
-  const col2X = colX[0] + sigColWidth * 1.5;
-  const col3X = colX[0] + sigColWidth * 2.5;
-
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(9);
-  doc.text('Mengetahui,', col1X, y, { align: 'center' });
-  doc.text('Disetujui oleh,', col2X, y, { align: 'center' });
-  doc.text('Dibuat oleh,', col3X, y, { align: 'center' });
-  y += 4;
-
-  doc.setFont('helvetica', 'bold');
-  doc.text('Ketua Yayasan', col1X, y, { align: 'center' });
-  doc.text("Ketua RQ Ulul Azmi", col2X, y, { align: 'center' });
-  doc.text("Bendahara RQ", col3X, y, { align: 'center' });
-
-  y += 24; // Space for signature / stamp
-
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(9.5);
-  doc.text(`( ${rab.ketuaYayasan || '...........................'} )`, col1X, y, { align: 'center' });
-  doc.text(`( ${rab.ketuaRQ || 'AL MUTAQIN'} )`, col2X, y, { align: 'center' });
-  doc.text(`( ${rab.bendaharaRQ || 'HAMIDAH FAUZIYAH'} )`, col3X, y, { align: 'center' });
-
-  const blob = doc.output('blob');
-  const url = URL.createObjectURL(blob);
-  return { blob, url };
+// Helper to format currency exactly as in sample PDFs
+function formatCurrency(amount: number, withDecimals = false): string {
+  const num = Math.round(Number(amount) || 0);
+  const formatted = num.toLocaleString('id-ID');
+  return withDecimals ? `Rp ${formatted},00` : `Rp ${formatted}`;
 }
 
+// Format date to Indonesian (e.g. "31 Agustus 2025" or "02 November 2026")
+function formatFullDate(dateStr: string): string {
+  if (!dateStr) return '';
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return dateStr;
+    const months = [
+      'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+      'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+    ];
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = months[d.getMonth()];
+    const year = d.getFullYear();
+    return `${day} ${month} ${year}`;
+  } catch {
+    return dateStr;
+  }
+}
+
+// Generate rendered Arabic header image using HTML5 Canvas for flawless cursive rendering
+function getArabicHeaderDataURL(): string {
+  try {
+    if (typeof document === 'undefined') return '';
+    const canvas = document.createElement('canvas');
+    canvas.width = 650;
+    canvas.height = 170;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return '';
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#000000';
+    ctx.textAlign = 'right';
+    ctx.direction = 'rtl';
+
+    // Line 1: Title (Bold)
+    ctx.font = 'bold 38px "Traditional Arabic", "Amiri", "Times New Roman", "Scheherazade", serif';
+    ctx.fillText('بيت القرآن أولو العزم', 640, 42);
+
+    // Line 2: Address line 1
+    ctx.font = 'normal 24px "Traditional Arabic", "Amiri", "Times New Roman", serif';
+    ctx.fillText('أونيت 6، كيبانج بودي جايا، لمبو كيبانج', 640, 88);
+
+    // Line 3: Address line 2
+    ctx.font = 'normal 24px "Traditional Arabic", "Amiri", "Times New Roman", serif';
+    ctx.fillText('توالنج بوانج غربي 34388 لمبونج', 640, 132);
+
+    return canvas.toDataURL('image/png');
+  } catch (e) {
+    return '';
+  }
+}
+
+/**
+ * Draws the official standardized Kop Surat of Rumah Qur'an Ulul Azmi
+ * exactly as structured in the reference PDF files.
+ */
+function drawOfficialKopSurat(doc: jsPDF): number {
+  const leftX = 20;
+  const rightX = 190;
+  const logoX = 94.5;
+  const logoY = 11;
+  const logoSize = 21;
+
+  // 1. Left: Indonesian Institution Header
+  doc.setFont('times', 'bold');
+  doc.setFontSize(13);
+  doc.setTextColor(0, 0, 0);
+  doc.text("RUMAH QUR'AN ULUL AZMI", leftX, 17);
+
+  doc.setFont('times', 'normal');
+  doc.setFontSize(9.5);
+  doc.text('Unit VI, Kibang Budi Jaya, Lambu Kibang', leftX, 22.5);
+  doc.text('Tulang Bawang Barat 34388 Lampung', leftX, 27.5);
+  doc.text('Telp. 0813 6748 7538', leftX, 32.5);
+
+  // 2. Center: Logo
+  try {
+    if (LOGO_RQ_BASE64) {
+      doc.addImage(LOGO_RQ_BASE64, 'JPEG', logoX, logoY, logoSize, logoSize);
+    }
+  } catch (e) {
+    console.warn('Could not add logo image to PDF:', e);
+  }
+
+  // 3. Right: Arabic Header
+  try {
+    const arabicImg = getArabicHeaderDataURL();
+    if (arabicImg) {
+      doc.addImage(arabicImg, 'PNG', 128, 10, 62, 22);
+    } else {
+      // Fallback text if canvas unavailable
+      doc.setFont('times', 'bold');
+      doc.setFontSize(11);
+      doc.text('BAITUL QURAN ULUL AZMI', rightX, 17, { align: 'right' });
+      doc.setFont('times', 'normal');
+      doc.setFontSize(9);
+      doc.text('Unit VI, Kibang Budi Jaya, Lambu Kibang', rightX, 22.5, { align: 'right' });
+      doc.text('Tulang Bawang Barat 34388 Lampung', rightX, 27.5, { align: 'right' });
+    }
+  } catch (e) {
+    console.warn('Arabic header render notice:', e);
+  }
+
+  // 4. Horizontal Separator Line (Black double line)
+  const lineY = 36;
+  doc.setDrawColor(0, 0, 0);
+  doc.setLineWidth(0.8);
+  doc.line(leftX, lineY, rightX, lineY);
+
+  doc.setLineWidth(0.25);
+  doc.line(leftX, lineY + 1.2, rightX, lineY + 1.2);
+
+  return lineY + 8; // Return start Y for content
+}
+
+/**
+ * ============================================================================
+ * GENERATOR LAB (Laporan Anggaran Bulanan)
+ * 3 Halaman Persis Sesuai Lampiran LAB_RQ_057a94ea.pdf
+ * ============================================================================
+ */
 export function generateLABPDFBlob(
   lab: LABRecord,
   transactions: TransaksiRecord[] = []
@@ -162,188 +140,506 @@ export function generateLABPDFBlob(
     format: 'a4',
   });
 
-  const pageWidth = doc.internal.pageSize.getWidth();
-  let y = 18;
+  const kota = lab.kota || 'Kibang Budi Jaya';
+  const tglSurat = formatFullDate(lab.tanggal) || `${lab.bulan} ${lab.tahun}`;
+  const ketuaName = (lab.ketuaRQ || 'AL MUTAQIN').toUpperCase();
+  const bendaharaName = (lab.bendaharaRQ || 'HAMMAD').toUpperCase();
 
-  // Header / Kop Surat
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(11);
-  doc.setTextColor(40, 40, 40);
-  doc.text('FIA — FINANCE INSTANSI AZMI', pageWidth / 2, y, { align: 'center' });
+  // --------------------------------------------------------------------------
+  // HALAMAN 1: Surat Pengantar Laporan Rekapitulasi Keuangan
+  // --------------------------------------------------------------------------
+  let y = drawOfficialKopSurat(doc);
+
+  doc.setFont('times', 'normal');
+  doc.setFontSize(10.5);
+  doc.setTextColor(0, 0, 0);
+
+  // Metadata surat
+  doc.text(`Nomor : ${lab.nomor || '125/YUA/RQ/VIII/2025'}`, 20, y);
   y += 5.5;
-
-  doc.setFontSize(14);
-  doc.text('YAYASAN MISYKATUL UMMAH (YMU)', pageWidth / 2, y, { align: 'center' });
-  y += 6;
-
-  doc.setFontSize(15);
-  doc.setTextColor(41, 128, 185); // Blue
-  doc.text("RUMAH QUR'AN ULUL AZMI", pageWidth / 2, y, { align: 'center' });
-  y += 5;
-
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(9);
-  doc.setTextColor(80, 80, 80);
-  doc.text('Sekretariat: Kibang Budi Jaya, Lambu Kibang, Tulang Bawang Barat, Lampung', pageWidth / 2, y, { align: 'center' });
-  y += 4;
-
-  // Header line
-  doc.setDrawColor(41, 128, 185);
-  doc.setLineWidth(0.8);
-  doc.line(15, y, pageWidth - 15, y);
-  y += 1.2;
-  doc.setDrawColor(180, 180, 180);
-  doc.setLineWidth(0.3);
-  doc.line(15, y, pageWidth - 15, y);
-  y += 8;
-
-  // Document Title
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(13);
-  doc.setTextColor(40, 40, 40);
-  doc.text('LAPORAN ANGGARAN BULANAN (LAB)', pageWidth / 2, y, { align: 'center' });
-  y += 5;
-
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(10);
-  doc.setTextColor(100, 100, 100);
-  doc.text(`Nomor: ${lab.nomor}`, pageWidth / 2, y, { align: 'center' });
-  y += 5;
-  doc.text(`Periode: Bulan ${lab.bulan} ${lab.tahun}`, pageWidth / 2, y, { align: 'center' });
-  y += 8;
-
-  // Saldo Awal Box
-  const colX = [15, 26, 50, 115, 150, 195];
-  doc.setFillColor(240, 245, 250);
-  doc.roundedRect(colX[0], y, colX[5] - colX[0], 8, 1, 1, 'F');
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(9.5);
-  doc.setTextColor(41, 128, 185);
-  doc.text('SALDO AWAL KAS:', colX[0] + 4, y + 5.5);
-  doc.text(formatRupiah(lab.saldoAwal), colX[5] - 4, y + 5.5, { align: 'right' });
+  doc.text('Lamp. : 1 bundel', 20, y);
+  y += 5.5;
+  doc.text('Perihal : Laporan Rekapitulasi Keuangan', 20, y);
   y += 11;
 
-  // Transactions Table Header
-  doc.setFillColor(245, 247, 250);
-  doc.rect(colX[0], y, colX[5] - colX[0], 7.5, 'F');
-  doc.setDrawColor(200, 200, 200);
-  doc.setLineWidth(0.2);
-  doc.rect(colX[0], y, colX[5] - colX[0], 7.5, 'S');
+  // Tujuan surat
+  doc.text('KepadaYkh.', 20, y);
+  y += 5.5;
+  doc.setFont('times', 'bold');
+  doc.text('Ketua Yayasan Misykatul Ummah', 20, y);
+  y += 5.5;
+  doc.setFont('times', 'normal');
+  doc.text('Di Tempat', 20, y);
+  y += 12;
 
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8.5);
-  doc.setTextColor(30, 30, 30);
-  doc.text('NO', (colX[0] + colX[1]) / 2, y + 5, { align: 'center' });
-  doc.text('TANGGAL', colX[1] + 2, y + 5);
-  doc.text('URAIAN / KETERANGAN', colX[2] + 2, y + 5);
-  doc.text('MASUK (RP)', colX[4] - 2, y + 5, { align: 'right' });
-  doc.text('KELUAR (RP)', colX[5] - 2, y + 5, { align: 'right' });
-  y += 7.5;
+  // Salam Pembuka & Isi Surat
+  doc.setFont('times', 'bolditalic');
+  doc.text('Assalamualaikum Warahmatullahi Wabarakatuh', 20, y);
+  y += 6.5;
 
-  // Rows
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8);
-  doc.setTextColor(40, 40, 40);
+  doc.setFont('times', 'normal');
+  const paragraf1 =
+    "Alhamdulillah, segala puji bagi Allah Subhanahu wata'ala. Sholawat dan salam semoga tetap tercurah limpahkan kepada Nabi Muhammad Shallallahu 'alaihi wasallam.";
+  const splitP1 = doc.splitTextToSize(paragraf1, 170);
+  doc.text(splitP1, 20, y);
+  y += splitP1.length * 5.2 + 2;
 
-  if (transactions.length === 0) {
-    doc.text('(Belum ada catatan transaksi untuk periode ini)', (colX[0] + colX[5]) / 2, y + 6, { align: 'center' });
-    y += 10;
-  } else {
-    transactions.forEach((trx, i) => {
-      const rowHeight = 6.5;
-      if (i % 2 === 1) {
-        doc.setFillColor(252, 253, 254);
-        doc.rect(colX[0], y, colX[5] - colX[0], rowHeight, 'F');
-      }
-      doc.setDrawColor(230, 230, 230);
-      doc.line(colX[0], y + rowHeight, colX[5], y + rowHeight);
+  const paragraf2 = `Bersama ini kami sampaikan kepada ketua Yayasan Misykatul Ummah, sirkulasi keuangan Rumah Qur’an Ulul Azmi selama bulan ${lab.bulan} ${lab.tahun}. Adapun rinciannya sebagai berikut;`;
+  const splitP2 = doc.splitTextToSize(paragraf2, 170);
+  doc.text(splitP2, 20, y);
+  y += splitP2.length * 5.2 + 2;
 
-      doc.text(String(i + 1), (colX[0] + colX[1]) / 2, y + 4.5, { align: 'center' });
-      doc.text(trx.tanggal || '-', colX[1] + 2, y + 4.5);
-      doc.text(trx.keterangan || '-', colX[2] + 2, y + 4.5);
-
-      if (trx.masuk > 0) {
-        doc.setTextColor(39, 174, 96);
-        doc.text(formatRupiah(trx.masuk), colX[4] - 2, y + 4.5, { align: 'right' });
-      } else {
-        doc.setTextColor(160, 160, 160);
-        doc.text('-', colX[4] - 2, y + 4.5, { align: 'right' });
-      }
-
-      if (trx.keluar > 0) {
-        doc.setTextColor(231, 76, 60);
-        doc.text(formatRupiah(trx.keluar), colX[5] - 2, y + 4.5, { align: 'right' });
-      } else {
-        doc.setTextColor(160, 160, 160);
-        doc.text('-', colX[5] - 2, y + 4.5, { align: 'right' });
-      }
-
-      doc.setTextColor(40, 40, 40);
-      y += rowHeight;
-    });
-  }
-
-  // Summary Row
-  y += 2;
-  doc.setFillColor(245, 247, 250);
-  doc.rect(colX[0], y, colX[5] - colX[0], 7.5, 'F');
-  doc.setDrawColor(200, 200, 200);
-  doc.rect(colX[0], y, colX[5] - colX[0], 7.5, 'S');
-
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8.5);
-  doc.text('TOTAL MUTASI KAS', colX[2] + 2, y + 5);
-  doc.setTextColor(39, 174, 96);
-  doc.text(formatRupiah(lab.totalMasuk), colX[4] - 2, y + 5, { align: 'right' });
-  doc.setTextColor(231, 76, 60);
-  doc.text(formatRupiah(lab.totalKeluar), colX[5] - 2, y + 5, { align: 'right' });
-
-  y += 9;
-
-  // Saldo Akhir Box
-  doc.setFillColor(235, 245, 255);
-  doc.roundedRect(colX[0], y, colX[5] - colX[0], 9, 1, 1, 'F');
-  doc.setDrawColor(41, 128, 185);
-  doc.setLineWidth(0.4);
-  doc.roundedRect(colX[0], y, colX[5] - colX[0], 9, 1, 1, 'S');
-
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(10);
-  doc.setTextColor(40, 40, 40);
-  doc.text('SALDO AKHIR KAS (Saldo Awal + Masuk - Keluar)', colX[0] + 4, y + 6);
-  doc.setTextColor(41, 128, 185);
-  doc.text(formatRupiah(lab.saldoAkhir), colX[5] - 4, y + 6, { align: 'right' });
-
-  y += 18;
-
-  // City and Date
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(9.5);
-  doc.setTextColor(40, 40, 40);
-  doc.text(`${lab.kota || 'Kibang Budi Jaya'}, ${formatTanggalIndonesia(lab.tanggal)}`, colX[5], y, { align: 'right' });
+  // Poin-poin lampiran
+  doc.text(`1.  Rekapitulasi keuangan bulan ${lab.bulan} ${lab.tahun} (terlampir)`, 25, y);
+  y += 5.5;
+  doc.text(`2.  Laporan jumlah pemasukan dan pengeluaran bulan ${lab.bulan} ${lab.tahun} (terlampir)`, 25, y);
+  y += 5.5;
+  doc.text('3.  Bukti pemasukan dan pengeluaran (terlampir)', 25, y);
   y += 8;
 
-  // 2-Column Signatures
-  const halfWidth = (colX[5] - colX[0]) / 2;
-  const colLeft = colX[0] + halfWidth * 0.5;
-  const colRight = colX[0] + halfWidth * 1.5;
+  // Penutup
+  const paragraf3 =
+    'Demikian laporan yang kami buat, atas perhatiannya kami ucapkan Jazakumullah Khoiron.';
+  doc.text(paragraf3, 20, y);
+  y += 6;
 
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(9);
-  doc.text('Mengetahui / Menyetujui,', colLeft, y, { align: 'center' });
-  doc.text('Dibuat oleh,', colRight, y, { align: 'center' });
-  y += 4;
-
-  doc.setFont('helvetica', 'bold');
-  doc.text("Ketua RQ Ulul Azmi", colLeft, y, { align: 'center' });
-  doc.text("Bendahara RQ", colRight, y, { align: 'center' });
-
+  doc.setFont('times', 'bolditalic');
+  doc.text('Wassalamualaikum Warahmatullahi Wabarakatuh', 20, y);
   y += 24;
 
-  doc.setFont('helvetica', 'bold');
+  // Tanda Tangan Halaman 1
+  // Tanggal di atas kolom kanan
+  doc.setFont('times', 'normal');
+  doc.setFontSize(10.5);
+  doc.text(`${kota}, ${tglSurat}`, 155, y, { align: 'center' });
+  y += 8;
+
+  doc.text('Mengetahui,', 105, y, { align: 'center' });
+  y += 7;
+
+  // Dua kolom tanda tangan
+  const colLeft = 55;
+  const colRight = 155;
+
+  doc.text("Ketua Rumah Qur'an", colLeft, y, { align: 'center' });
+  doc.text("Bendahara Rumah Qur'an", colRight, y, { align: 'center' });
+
+  y += 26; // Ruang tanda tangan
+
+  doc.setFont('times', 'bold');
+  doc.text(ketuaName, colLeft, y, { align: 'center' });
+  // Underline
+  const ketuaWidth = doc.getTextWidth(ketuaName);
+  doc.setLineWidth(0.3);
+  doc.line(colLeft - ketuaWidth / 2, y + 1, colLeft + ketuaWidth / 2, y + 1);
+
+  doc.text(bendaharaName, colRight, y, { align: 'center' });
+  const bendaharaWidth = doc.getTextWidth(bendaharaName);
+  doc.line(colRight - bendaharaWidth / 2, y + 1, colRight + bendaharaWidth / 2, y + 1);
+
+  // --------------------------------------------------------------------------
+  // HALAMAN 2: Rekapitulasi Keuangan Bulan [Bulan] [Tahun]
+  // --------------------------------------------------------------------------
+  doc.addPage();
+  y = drawOfficialKopSurat(doc);
+
+  // Judul Tabel Halaman 2
+  doc.setFont('times', 'bold');
+  doc.setFontSize(11);
+  doc.setTextColor(0, 0, 0);
+  doc.text(`REKAPITULASI KEUANGAN BULAN ${(lab.bulan || '').toUpperCase()} ${lab.tahun}`, 105, y, {
+    align: 'center',
+  });
+  y += 5.5;
+  doc.text("RUMAH QUR'AN ULUL AZMI", 105, y, { align: 'center' });
+  y += 7;
+
+  doc.setFont('times', 'bold');
   doc.setFontSize(9.5);
-  doc.text(`( ${lab.ketuaRQ || 'AL MUTAQIN'} )`, colLeft, y, { align: 'center' });
-  doc.text(`( ${lab.bendaharaRQ || 'HAMIDAH FAUZIYAH'} )`, colRight, y, { align: 'center' });
+  doc.text(`Bulan : ${lab.bulan} ${lab.tahun}`, 20, y);
+  y += 3;
+
+  // Definisi Kolom Tabel Rekapitulasi
+  // Total width: 170mm (from 20 to 190)
+  const cols = [20, 42, 51, 114, 140, 166, 190];
+  const rowH = 6;
+
+  // Header Tabel
+  doc.setFillColor(255, 255, 255);
+  doc.rect(cols[0], y, cols[6] - cols[0], rowH + 1, 'S');
+
+  doc.setFont('times', 'bold');
+  doc.setFontSize(8.5);
+  doc.text('Hari/Tgl', (cols[0] + cols[1]) / 2, y + 4.5, { align: 'center' });
+  doc.text('No', (cols[1] + cols[2]) / 2, y + 4.5, { align: 'center' });
+  doc.text('Keterangan', (cols[2] + cols[3]) / 2, y + 4.5, { align: 'center' });
+  doc.text('Masuk', (cols[3] + cols[4]) / 2, y + 4.5, { align: 'center' });
+  doc.text('Keluar', (cols[4] + cols[5]) / 2, y + 4.5, { align: 'center' });
+  doc.text('Saldo', (cols[5] + cols[6]) / 2, y + 4.5, { align: 'center' });
+
+  // Grid vertical header lines
+  for (let i = 1; i < cols.length - 1; i++) {
+    doc.line(cols[i], y, cols[i], y + rowH + 1);
+  }
+  y += rowH + 1;
+
+  // Baris 0: Saldo Awal Kas
+  let runningSaldo = Number(lab.saldoAwal) || 0;
+  doc.setFont('times', 'normal');
+  doc.setFontSize(8);
+  doc.rect(cols[0], y, cols[6] - cols[0], rowH, 'S');
+  for (let i = 1; i < cols.length - 1; i++) {
+    doc.line(cols[i], y, cols[i], y + rowH);
+  }
+  doc.text(`Saldo Awal ${lab.bulan} ${lab.tahun}`, cols[2] + 2, y + 4.2);
+  doc.text(formatCurrency(runningSaldo, true), cols[4] - 2, y + 4.2, { align: 'right' });
+  doc.text(formatCurrency(runningSaldo, true), cols[6] - 2, y + 4.2, { align: 'right' });
+  y += rowH;
+
+  // Baris-baris Transaksi
+  const sortedTrx = [...transactions].sort((a, b) => a.tanggal.localeCompare(b.tanggal));
+
+  sortedTrx.forEach((trx, idx) => {
+    // Check if page overflow
+    if (y > 240) {
+      doc.addPage();
+      y = drawOfficialKopSurat(doc) + 5;
+    }
+
+    const masuk = Number(trx.masuk) || 0;
+    const keluar = Number(trx.keluar) || 0;
+    runningSaldo += masuk - keluar;
+
+    doc.rect(cols[0], y, cols[6] - cols[0], rowH, 'S');
+    for (let i = 1; i < cols.length - 1; i++) {
+      doc.line(cols[i], y, cols[i], y + rowH);
+    }
+
+    // Hari/Tgl format (DD/MM/YYYY)
+    let tglDisplay = trx.tanggal;
+    try {
+      const parts = trx.tanggal.split('-');
+      if (parts.length === 3) {
+        tglDisplay = `${parts[2]}/${parts[1]}/${parts[0]}`;
+      }
+    } catch {}
+
+    doc.text(tglDisplay, (cols[0] + cols[1]) / 2, y + 4.2, { align: 'center' });
+    doc.text(String(idx + 1), (cols[1] + cols[2]) / 2, y + 4.2, { align: 'center' });
+    
+    // Truncate keterangan if too long
+    const ket = doc.splitTextToSize(trx.keterangan || '-', cols[3] - cols[2] - 3);
+    doc.text(ket[0] || '-', cols[2] + 2, y + 4.2);
+
+    if (masuk > 0) {
+      doc.text(formatCurrency(masuk, true), cols[4] - 2, y + 4.2, { align: 'right' });
+    }
+    if (keluar > 0) {
+      doc.text(formatCurrency(keluar, true), cols[5] - 2, y + 4.2, { align: 'right' });
+    }
+    doc.text(formatCurrency(runningSaldo, true), cols[6] - 2, y + 4.2, { align: 'right' });
+
+    y += rowH;
+  });
+
+  // Baris SALDO AKHIR
+  doc.setFont('times', 'bold');
+  doc.rect(cols[0], y, cols[6] - cols[0], rowH + 1, 'S');
+  doc.line(cols[5], y, cols[5], y + rowH + 1);
+  doc.text('SALDO AKHIR', (cols[0] + cols[5]) / 2, y + 4.8, { align: 'center' });
+  doc.text(formatCurrency(lab.saldoAkhir, true), cols[6] - 2, y + 4.8, { align: 'right' });
+  y += rowH + 8;
+
+  // Tanda Tangan Halaman 2
+  if (y > 245) {
+    doc.addPage();
+    y = drawOfficialKopSurat(doc) + 15;
+  }
+  doc.setFont('times', 'normal');
+  doc.setFontSize(10.5);
+  doc.text(`${kota}, ${tglSurat}`, 155, y, { align: 'center' });
+  y += 7;
+
+  doc.text('Mengetahui,', 105, y, { align: 'center' });
+  y += 7;
+
+  doc.text("Ketua Rumah Qur'an", colLeft, y, { align: 'center' });
+  doc.text("Bendahara Rumah Qur'an", colRight, y, { align: 'center' });
+  y += 26;
+
+  doc.setFont('times', 'bold');
+  doc.text(ketuaName, colLeft, y, { align: 'center' });
+  doc.line(colLeft - ketuaWidth / 2, y + 1, colLeft + ketuaWidth / 2, y + 1);
+
+  doc.text(bendaharaName, colRight, y, { align: 'center' });
+  doc.line(colRight - bendaharaWidth / 2, y + 1, colRight + bendaharaWidth / 2, y + 1);
+
+  // --------------------------------------------------------------------------
+  // HALAMAN 3: Laporan Jumlah Pemasukan dan Pengeluaran
+  // --------------------------------------------------------------------------
+  doc.addPage();
+  y = drawOfficialKopSurat(doc);
+
+  doc.setFont('times', 'bold');
+  doc.setFontSize(11);
+  doc.setTextColor(0, 0, 0);
+  doc.text('LAPORAN JUMLAH PEMASUKAN DAN PENGELUARAN', 105, y, { align: 'center' });
+  y += 5.5;
+  doc.text(`BULAN ${(lab.bulan || '').toUpperCase()} ${lab.tahun}`, 105, y, { align: 'center' });
+  y += 10;
+
+  // Tabel Rekap Sederhana 4 Kolom
+  // Total width: 146mm (from 32 to 178)
+  const sumCols = [32, 45, 88, 133, 178];
+  const sumRowH = 8;
+
+  // Header
+  doc.rect(sumCols[0], y, sumCols[4] - sumCols[0], sumRowH, 'S');
+  for (let i = 1; i < sumCols.length - 1; i++) {
+    doc.line(sumCols[i], y, sumCols[i], y + sumRowH);
+  }
+
+  doc.setFont('times', 'bold');
+  doc.setFontSize(9.5);
+  doc.text('No', (sumCols[0] + sumCols[1]) / 2, y + 5.5, { align: 'center' });
+  doc.text('Bulan', (sumCols[1] + sumCols[2]) / 2, y + 5.5, { align: 'center' });
+  doc.text('Pemasukan', (sumCols[2] + sumCols[3]) / 2, y + 5.5, { align: 'center' });
+  doc.text('Pengeluaran', (sumCols[3] + sumCols[4]) / 2, y + 5.5, { align: 'center' });
+  y += sumRowH;
+
+  // Data row
+  doc.rect(sumCols[0], y, sumCols[4] - sumCols[0], sumRowH, 'S');
+  for (let i = 1; i < sumCols.length - 1; i++) {
+    doc.line(sumCols[i], y, sumCols[i], y + sumRowH);
+  }
+
+  const grandTotalMasuk = (Number(lab.saldoAwal) || 0) + (Number(lab.totalMasuk) || 0);
+
+  doc.setFont('times', 'normal');
+  doc.text('1', (sumCols[0] + sumCols[1]) / 2, y + 5.5, { align: 'center' });
+  doc.text(`01 ${lab.bulan} ${lab.tahun}`, sumCols[1] + 3, y + 5.5);
+  doc.text(formatCurrency(grandTotalMasuk, true), sumCols[3] - 3, y + 5.5, { align: 'right' });
+  doc.text(formatCurrency(lab.totalKeluar, true), sumCols[4] - 3, y + 5.5, { align: 'right' });
+  y += sumRowH + 8;
+
+  // Rumus Saldo Akhir di bawah tabel
+  doc.setFont('times', 'bold');
+  doc.setFontSize(9.5);
+  const formulaStr = `Saldo akhir = ${formatCurrency(grandTotalMasuk, true)} – ${formatCurrency(lab.totalKeluar, true)} = ${formatCurrency(lab.saldoAkhir, true)}`;
+  doc.text(formulaStr, 32, y);
+  y += 24;
+
+  // Tanda Tangan Halaman 3
+  doc.setFont('times', 'normal');
+  doc.setFontSize(10.5);
+  doc.text(`${kota}, ${tglSurat}`, 155, y, { align: 'center' });
+  y += 7;
+
+  doc.text('Mengetahui,', 105, y, { align: 'center' });
+  y += 7;
+
+  doc.text("Ketua Rumah Qur'an", colLeft, y, { align: 'center' });
+  doc.text("Bendahara Rumah Qur'an", colRight, y, { align: 'center' });
+  y += 26;
+
+  doc.setFont('times', 'bold');
+  doc.text(ketuaName, colLeft, y, { align: 'center' });
+  doc.line(colLeft - ketuaWidth / 2, y + 1, colLeft + ketuaWidth / 2, y + 1);
+
+  doc.text(bendaharaName, colRight, y, { align: 'center' });
+  doc.line(colRight - bendaharaWidth / 2, y + 1, colRight + bendaharaWidth / 2, y + 1);
+
+  const blob = doc.output('blob');
+  const url = URL.createObjectURL(blob);
+  return { blob, url };
+}
+
+/**
+ * ============================================================================
+ * GENERATOR RAB (Rencana Anggaran Biaya)
+ * 2 Halaman Persis Sesuai Lampiran RAB_RQ_e82518b1.pdf
+ * ============================================================================
+ */
+export function generateRABPDFBlob(rab: RABRecord): { blob: Blob; url: string } {
+  const doc = new jsPDF({
+    orientation: 'portrait',
+    unit: 'mm',
+    format: 'a4',
+  });
+
+  const kota = rab.kota || 'Kibang Budi Jaya';
+  const tglSurat = formatFullDate(rab.tanggal) || `${rab.bulan} ${rab.tahun}`;
+  const ketuaRQName = (rab.ketuaRQ || 'AL MUTAQIN').toUpperCase();
+  const bendaharaRQName = (rab.bendaharaRQ || 'HAMIDAH FAUZIYAH').toUpperCase();
+  const ketuaYayasanName = (rab.ketuaYayasan || 'SURYADI').toUpperCase();
+
+  // --------------------------------------------------------------------------
+  // HALAMAN 1: Surat Permohonan RAB
+  // --------------------------------------------------------------------------
+  let y = drawOfficialKopSurat(doc);
+
+  doc.setFont('times', 'normal');
+  doc.setFontSize(10.5);
+  doc.setTextColor(0, 0, 0);
+
+  // Metadata Surat
+  doc.text(`Nomor : ${rab.nomor || '0/YMU/RQ/XI/2026'}`, 20, y);
+  y += 5.5;
+  doc.text('Lamp. : -', 20, y);
+  y += 5.5;
+  doc.text('Perihal : ', 20, y);
+  doc.setFont('times', 'bold');
+  doc.text('Permohonan', 37, y);
+  y += 11;
+
+  // Tujuan Surat
+  doc.setFont('times', 'normal');
+  doc.text('KepadaYkh.', 20, y);
+  y += 5.5;
+  doc.setFont('times', 'bold');
+  doc.text('Ketua Yayasan Misykatul Ummah', 20, y);
+  y += 5.5;
+  doc.setFont('times', 'normal');
+  doc.text('Di Tempat', 20, y);
+  y += 12;
+
+  // Salam Pembuka & Isi Surat
+  doc.setFont('times', 'bolditalic');
+  doc.text('Assalamualaikum Warahmatullahi Wabarakatuh', 20, y);
+  y += 6.5;
+
+  doc.setFont('times', 'normal');
+  const paragraf1 =
+    "Alhamdulillah, segala puji bagi Allah Subhanahu wata'ala. Sholawat dan salam semoga tetap tercurah limpahkan kepada Nabi Muhammad Shallallahu 'alaihi wasallam.";
+  const splitP1 = doc.splitTextToSize(paragraf1, 170);
+  doc.text(splitP1, 20, y);
+  y += splitP1.length * 5.2 + 2;
+
+  const paragraf2 =
+    "Untuk menunjang sarana prasarana dan kegiatan belajar mengajar di Rumah Qur'an Ulul Azmi pada setiap bulannya, maka dengan ini kami mengajukan Rencana Anggaran Biaya oprasional Rumah Qur'an. Adapun rincian Rencana Anggaran Biaya terlampir.";
+  const splitP2 = doc.splitTextToSize(paragraf2, 170);
+  doc.text(splitP2, 20, y);
+  y += splitP2.length * 5.2 + 2;
+
+  const paragraf3 =
+    'Demikian surat permohonan ini yang kami buat, mohon kiranya agar diterima dan ditindaklanjuti. Atas perhatiannya kami ucapkan Jazakumullah Khoiron';
+  const splitP3 = doc.splitTextToSize(paragraf3, 170);
+  doc.text(splitP3, 20, y);
+  y += splitP3.length * 5.2 + 2;
+
+  doc.setFont('times', 'bolditalic');
+  doc.text('Wassalamualaikum Warahmatullahi Wabarakatuh.', 20, y);
+  y += 18;
+
+  // Tanggal Surat
+  doc.setFont('times', 'normal');
+  doc.setFontSize(10.5);
+  doc.text(`${kota}, ${tglSurat}`, 155, y, { align: 'center' });
+  y += 8;
+
+  // Mengetahui
+  doc.text('Mengetahui,', 105, y, { align: 'center' });
+  y += 7;
+
+  // Dua kolom (Ketua RQ & Bendahara RQ)
+  const colLeft = 55;
+  const colRight = 155;
+
+  doc.text("Ketua RQ Ulul Azmi", colLeft, y, { align: 'center' });
+  doc.text("Bendahara RQ Ulul Azmi", colRight, y, { align: 'center' });
+  y += 24;
+
+  doc.setFont('times', 'bold');
+  doc.text(ketuaRQName, colLeft, y, { align: 'center' });
+  const ketuaRQWidth = doc.getTextWidth(ketuaRQName);
+  doc.setLineWidth(0.3);
+  doc.line(colLeft - ketuaRQWidth / 2, y + 1, colLeft + ketuaRQWidth / 2, y + 1);
+
+  doc.text(bendaharaRQName, colRight, y, { align: 'center' });
+  const bendaharaRQWidth = doc.getTextWidth(bendaharaRQName);
+  doc.line(colRight - bendaharaRQWidth / 2, y + 1, colRight + bendaharaWidth(bendaharaRQName) / 2, y + 1);
+
+  y += 10;
+
+  // Baris Menyetujui (Ketua Yayasan di tengah bawah)
+  doc.setFont('times', 'normal');
+  doc.text('Yang menyetujui,', 105, y, { align: 'center' });
+  y += 5.5;
+  doc.text('Ketua Yayasan Misykatul Ummah', 105, y, { align: 'center' });
+  y += 24;
+
+  doc.setFont('times', 'bold');
+  doc.text(ketuaYayasanName, 105, y, { align: 'center' });
+  const yayasanWidth = doc.getTextWidth(ketuaYayasanName);
+  doc.line(105 - yayasanWidth / 2, y + 1, 105 + yayasanWidth / 2, y + 1);
+
+  // Helper inside scope
+  function bendaharaWidth(name: string) {
+    return doc.getTextWidth(name);
+  }
+
+  // --------------------------------------------------------------------------
+  // HALAMAN 2: Lampiran Rencana Anggaran Biaya
+  // --------------------------------------------------------------------------
+  doc.addPage();
+  y = 25; // Sesuai lampiran tidak ada kop surat di halaman 2 lampiran RAB
+
+  doc.setFont('times', 'normal');
+  doc.setFontSize(11);
+  doc.setTextColor(0, 0, 0);
+  doc.text('Lampiran', 35, y);
+  y += 10;
+
+  doc.setFont('times', 'bold');
+  doc.text('I.       Rencana Anggaran Biaya', 35, y);
+  y += 4;
+
+  // Tabel 3 Kolom
+  // Total width: 135mm (from 35 to 170)
+  const rabCols = [35, 48, 125, 170];
+  const rabRowH = 7.5;
+
+  // Header
+  doc.rect(rabCols[0], y, rabCols[3] - rabCols[0], rabRowH, 'S');
+  for (let i = 1; i < rabCols.length - 1; i++) {
+    doc.line(rabCols[i], y, rabCols[i], y + rabRowH);
+  }
+
+  doc.setFont('times', 'bold');
+  doc.setFontSize(9.5);
+  doc.text('No', (rabCols[0] + rabCols[1]) / 2, y + 5.2, { align: 'center' });
+  doc.text('Rincian Kebutuhan', (rabCols[1] + rabCols[2]) / 2, y + 5.2, { align: 'center' });
+  doc.text('Jumlah', (rabCols[2] + rabCols[3]) / 2, y + 5.2, { align: 'center' });
+  y += rabRowH;
+
+  // Item Rows
+  doc.setFont('times', 'normal');
+  doc.setFontSize(9);
+
+  let totalRAB = 0;
+  rab.items.forEach((item, idx) => {
+    const jml = Number(item.jumlah) || 0;
+    totalRAB += jml;
+
+    doc.rect(rabCols[0], y, rabCols[3] - rabCols[0], rabRowH, 'S');
+    for (let i = 1; i < rabCols.length - 1; i++) {
+      doc.line(rabCols[i], y, rabCols[i], y + rabRowH);
+    }
+
+    doc.text(String(idx + 1), (rabCols[0] + rabCols[1]) / 2, y + 5.2, { align: 'center' });
+    doc.text(item.rincian || '-', rabCols[1] + 3, y + 5.2);
+    doc.text(formatCurrency(jml, false), rabCols[2] + 3, y + 5.2);
+
+    y += rabRowH;
+  });
+
+  // Total Row
+  doc.setFont('times', 'bold');
+  doc.rect(rabCols[0], y, rabCols[3] - rabCols[0], rabRowH, 'S');
+  doc.line(rabCols[2], y, rabCols[2], y + rabRowH);
+
+  doc.text('Jumlah Total', (rabCols[0] + rabCols[2]) / 2, y + 5.2, { align: 'center' });
+  doc.text(formatCurrency(totalRAB || rab.total, false), rabCols[2] + 3, y + 5.2);
 
   const blob = doc.output('blob');
   const url = URL.createObjectURL(blob);
