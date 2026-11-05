@@ -3,138 +3,121 @@ import {
   GoogleAuthProvider,
   onAuthStateChanged,
   signOut,
-  User
+  User,
 } from 'firebase/auth';
 import { auth } from '../lib/firebase';
-import { saveFirestoreSharedAuth, getFirestoreSharedAuth, SharedGoogleAuth } from './firestoreService';
+import firebaseConfig from '../../firebase-applet-config.json';
+
+declare global {
+  interface Window {
+    google?: any;
+  }
+}
 
 const provider = new GoogleAuthProvider();
 provider.addScope('https://www.googleapis.com/auth/spreadsheets');
 provider.addScope('https://www.googleapis.com/auth/drive.file');
 
-const LOCAL_TOKEN_KEY = 'fia_google_access_token_v1';
-const LOCAL_USER_KEY = 'fia_google_user_v1';
-
-let cachedAccessToken: string | null = (typeof window !== 'undefined' ? localStorage.getItem(LOCAL_TOKEN_KEY) : null);
+// In-memory token cache (never stored in localStorage)
+let cachedAccessToken: string | null = null;
+let cachedGisUser: User | null = null;
 let isSigningIn = false;
 
-export interface AppGoogleUser {
-  uid?: string;
-  email: string;
-  displayName: string;
-  photoURL?: string;
-  isSharedConnection?: boolean;
-}
-
-/**
- * Persist user and token locally so browser refresh never requires re-login
- */
-export function saveLocalGoogleSession(
-  user: { email?: string | null; displayName?: string | null; photoURL?: string | null; uid?: string },
-  token: string
-) {
-  try {
-    cachedAccessToken = token;
-    localStorage.setItem(LOCAL_TOKEN_KEY, token);
-    const emailStr = user.email || '';
-    localStorage.setItem(
-      LOCAL_USER_KEY,
-      JSON.stringify({
-        email: emailStr,
-        displayName: user.displayName || (emailStr ? emailStr.split('@')[0] : 'User'),
-        photoURL: user.photoURL || '',
-        uid: user.uid || '',
-      })
-    );
-  } catch (e) {
-    console.warn('Error saving local auth session:', e);
-  }
-}
-
-export function getLocalGoogleSession(): { user: AppGoogleUser | null; token: string | null } {
-  try {
-    const rawUser = localStorage.getItem(LOCAL_USER_KEY);
-    const token = localStorage.getItem(LOCAL_TOKEN_KEY) || cachedAccessToken;
-    if (rawUser && token) {
-      return { user: JSON.parse(rawUser), token };
-    }
-  } catch (e) {
-    // Non-blocking
-  }
-  return { user: null, token: null };
-}
-
-export function clearLocalGoogleSession() {
-  cachedAccessToken = null;
-  try {
-    localStorage.removeItem(LOCAL_TOKEN_KEY);
-    localStorage.removeItem(LOCAL_USER_KEY);
-  } catch (e) {
-    // Non-blocking
-  }
-}
-
-/**
- * Sync shared Google authentication status with central server & Cloud Firestore
- */
-export async function broadcastSharedGoogleAuth(
-  user: { email?: string | null; displayName?: string | null; photoURL?: string | null },
-  token: string
-) {
-  const emailStr = user.email || '';
-  const sharedData: SharedGoogleAuth = {
-    connected: true,
-    email: emailStr,
-    displayName: user.displayName || (emailStr ? emailStr.split('@')[0] : 'User'),
-    photoURL: user.photoURL || '',
-    connectedAt: new Date().toISOString(),
-  };
-
-  // 1. Sync to Cloud Firestore
-  try {
-    await saveFirestoreSharedAuth(sharedData);
-  } catch (err) {
-    console.warn('Notice saving shared auth to Firestore:', err);
-  }
-
-  // 2. Sync to Express Server
-  try {
-    await fetch('/api/auth/shared-google', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        ...sharedData,
-        accessToken: token,
-      }),
-    });
-  } catch (err) {
-    console.warn('Notice saving shared auth to server:', err);
-  }
-}
-
 export const initAuth = (
-  onAuthSuccess?: (user: User | AppGoogleUser, token: string) => void,
+  onAuthSuccess?: (user: User, token: string) => void,
   onAuthFailure?: () => void
 ) => {
-  // First, instantly check if we already have a saved session in localStorage
-  const localSession = getLocalGoogleSession();
-  if (localSession.user && localSession.token && onAuthSuccess) {
-    onAuthSuccess(localSession.user as any, localSession.token);
-  }
-
   return onAuthStateChanged(auth, async (user: User | null) => {
     if (user) {
-      const token = cachedAccessToken || localStorage.getItem(LOCAL_TOKEN_KEY) || '';
-      saveLocalGoogleSession(user, token);
-      if (onAuthSuccess) onAuthSuccess(user, token);
-    } else {
-      // If Firebase Auth does not have user, check if localSession exists
-      const restored = getLocalGoogleSession();
-      if (restored.user && restored.token) {
-        if (onAuthSuccess) onAuthSuccess(restored.user as any, restored.token);
+      if (cachedAccessToken) {
+        if (onAuthSuccess) onAuthSuccess(user, cachedAccessToken);
       } else if (!isSigningIn) {
+        cachedAccessToken = null;
         if (onAuthFailure) onAuthFailure();
       }
+    } else if (cachedGisUser && cachedAccessToken) {
+      if (onAuthSuccess) onAuthSuccess(cachedGisUser, cachedAccessToken);
+    } else {
+      cachedAccessToken = null;
+      if (onAuthFailure) onAuthFailure();
+    }
+  });
+};
+
+const signInWithGIS = async (): Promise<{ user: User; accessToken: string }> => {
+  return new Promise((resolve, reject) => {
+    if (typeof window === 'undefined' || !window.google?.accounts?.oauth2) {
+      reject(new Error('Google Identity Services SDK belum tersedia di browser.'));
+      return;
+    }
+
+    const clientId = firebaseConfig?.oAuthClientId;
+    if (!clientId) {
+      reject(new Error('OAuth Client ID tidak ditemukan di konfigurasi.'));
+      return;
+    }
+
+    try {
+      const tokenClient = window.google.accounts.oauth2.initTokenClient({
+        client_id: clientId,
+        scope:
+          'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile',
+        callback: async (tokenResponse: any) => {
+          if (tokenResponse.error) {
+            reject(new Error(tokenResponse.error_description || tokenResponse.error));
+            return;
+          }
+          const token = tokenResponse.access_token;
+          if (!token) {
+            reject(new Error('Token akses tidak diterima dari Google.'));
+            return;
+          }
+
+          cachedAccessToken = token;
+
+          try {
+            const profileRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+              headers: { Authorization: `Bearer ${token}` },
+            });
+            const profile = await profileRes.json();
+            const fallbackUser = {
+              uid: profile.sub || 'gis-' + Date.now(),
+              email: profile.email || 'Pengguna Google',
+              displayName: profile.name || profile.email || 'Pengguna Google',
+              photoURL: profile.picture || null,
+              emailVerified: profile.email_verified ?? true,
+              isAnonymous: false,
+              metadata: {},
+              providerData: [],
+              refreshToken: '',
+              tenantId: null,
+              delete: async () => {},
+              getIdToken: async () => token,
+              getIdTokenResult: async () => ({} as any),
+              reload: async () => {},
+              toJSON: () => ({}),
+              phoneNumber: null,
+              providerId: 'google.com',
+            } as unknown as User;
+
+            cachedGisUser = fallbackUser;
+            resolve({ user: fallbackUser, accessToken: token });
+          } catch {
+            const basicUser = {
+              uid: 'gis-' + Date.now(),
+              email: 'Pengguna Google',
+              displayName: 'Pengguna Google',
+              emailVerified: true,
+            } as unknown as User;
+            cachedGisUser = basicUser;
+            resolve({ user: basicUser, accessToken: token });
+          }
+        },
+      });
+
+      tokenClient.requestAccessToken({ prompt: 'consent' });
+    } catch (err) {
+      reject(err);
     }
   });
 };
@@ -142,20 +125,27 @@ export const initAuth = (
 export const googleSignIn = async (): Promise<{ user: User; accessToken: string } | null> => {
   try {
     isSigningIn = true;
-    const result = await signInWithPopup(auth, provider);
-    const credential = GoogleAuthProvider.credentialFromResult(result);
-    if (!credential?.accessToken) {
-      throw new Error('Gagal mendapatkan token akses dari Google Sign-In');
+    try {
+      const result = await signInWithPopup(auth, provider);
+      const credential = GoogleAuthProvider.credentialFromResult(result);
+      if (!credential?.accessToken) {
+        throw new Error('Gagal mendapatkan token akses dari Google Sign-In');
+      }
+      cachedAccessToken = credential.accessToken;
+      return { user: result.user, accessToken: cachedAccessToken };
+    } catch (error: any) {
+      const isUnauthorizedDomain =
+        error?.code === 'auth/unauthorized-domain' ||
+        (error?.message && String(error.message).includes('auth/unauthorized-domain'));
+
+      // If Firebase Auth throws unauthorized domain, try direct Google Identity Services
+      if (isUnauthorizedDomain && typeof window !== 'undefined' && window.google?.accounts?.oauth2) {
+        console.warn('Firebase Auth unauthorized domain encountered. Attempting direct Google Identity Services fallback...');
+        const gisResult = await signInWithGIS();
+        return gisResult;
+      }
+      throw error;
     }
-    cachedAccessToken = credential.accessToken;
-
-    // 1. Save locally for 1-time login across page reloads on this device
-    saveLocalGoogleSession(result.user, cachedAccessToken);
-
-    // 2. Broadcast to Cloud Database so OTHER devices don't have to login
-    await broadcastSharedGoogleAuth(result.user, cachedAccessToken);
-
-    return { user: result.user, accessToken: cachedAccessToken };
   } catch (error: any) {
     console.error('Sign in error:', error);
     throw error;
@@ -165,19 +155,13 @@ export const googleSignIn = async (): Promise<{ user: User; accessToken: string 
 };
 
 export const getAccessToken = async (): Promise<string | null> => {
-  return cachedAccessToken || (typeof window !== 'undefined' ? localStorage.getItem(LOCAL_TOKEN_KEY) : null);
+  return cachedAccessToken;
 };
 
 export const logout = async () => {
-  await signOut(auth);
-  clearLocalGoogleSession();
   try {
-    await fetch('/api/auth/shared-google', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ disconnect: true }),
-    });
-  } catch (e) {
-    // Non-blocking
-  }
+    await signOut(auth);
+  } catch (_) {}
+  cachedAccessToken = null;
+  cachedGisUser = null;
 };

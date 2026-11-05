@@ -56,19 +56,6 @@ export async function fetchSharedData(): Promise<{
   transaksiList: TransaksiRecord[];
   sheetConfig?: any;
 }> {
-  let serverConfig: any = null;
-  try {
-    const res = await fetch('/api/data');
-    if (res.ok) {
-      const json = await res.json();
-      if (json.ok && json.sheetConfig) {
-        serverConfig = json.sheetConfig;
-      }
-    }
-  } catch (e) {
-    // Non-blocking
-  }
-
   // 1. Try fetching from Cloud Firestore
   try {
     const firestoreData = await getFirestoreAllData();
@@ -82,7 +69,7 @@ export async function fetchSharedData(): Promise<{
         firestoreData.rabList,
         firestoreData.transaksiList
       );
-      return { ...firestoreData, sheetConfig: serverConfig };
+      return firestoreData;
     }
   } catch (err) {
     console.warn('Firestore fetch notice, trying server fallback:', err);
@@ -165,41 +152,6 @@ export async function persistTransaksi(
   const local = getLocalData();
   const updatedTrx = [trx, ...local.transaksiList];
   saveLocalData(local.labList, local.rabList, updatedTrx);
-  return { ok: true, syncedToSheets: false };
-}
-
-/**
- * Updates an existing transaction in Cloud Firestore, centralized server, and local mirror
- */
-export async function updateLocalTransaksi(
-  trx: TransaksiRecord
-): Promise<{ ok: boolean; syncedToSheets: boolean; updatedLAB?: LABRecord }> {
-  // 1. Update in Cloud Firestore
-  try {
-    await saveFirestoreTransaksi(trx);
-  } catch (err) {
-    console.warn('Failed updating in Firestore directly:', err);
-  }
-
-  // 2. Update via server API
-  try {
-    const res = await fetch(`/api/transaksi/${trx.id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(trx),
-    });
-    if (res.ok) {
-      const json = await res.json();
-      return { ok: true, syncedToSheets: true, updatedLAB: json.updatedLAB };
-    }
-  } catch (err) {
-    console.error('Error updating transaksi on server:', err);
-  }
-
-  // Local fallback
-  const local = getLocalData();
-  const updatedList = local.transaksiList.map((t) => (t.id === trx.id ? trx : t));
-  saveLocalData(local.labList, local.rabList, updatedList);
   return { ok: true, syncedToSheets: false };
 }
 

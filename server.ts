@@ -1,45 +1,10 @@
 import express, { Request, Response } from 'express';
-import http from 'http';
 import { createServer as createViteServer } from 'vite';
 import fs from 'fs';
 import path from 'path';
 
-function getNetworkConfig() {
-  const args = process.argv.slice(2);
-  let port = 3000;
-  let host = '0.0.0.0';
-
-  for (let i = 0; i < args.length; i++) {
-    const arg = args[i];
-    if (arg === '--port' && args[i + 1]) {
-      port = parseInt(args[i + 1], 10);
-      i++;
-    } else if (arg.startsWith('--port=')) {
-      port = parseInt(arg.split('=')[1], 10);
-    } else if (arg === '--host') {
-      if (args[i + 1] && !args[i + 1].startsWith('-')) {
-        host = args[i + 1];
-        i++;
-      } else {
-        host = '0.0.0.0';
-      }
-    } else if (arg.startsWith('--host=')) {
-      host = arg.split('=')[1];
-    }
-  }
-
-  // Only fallback to process.env.PORT in production if no explicit --port was supplied
-  const hasPortArg = args.some(a => a === '--port' || a.startsWith('--port='));
-  if (!hasPortArg && process.env.NODE_ENV === 'production' && process.env.PORT) {
-    port = parseInt(process.env.PORT, 10);
-  }
-
-  return { port, host };
-}
-
-const { port: PORT, host: HOST } = getNetworkConfig();
-
 const app = express();
+const PORT = Number(process.env.PORT) || 3000;
 app.use(express.json());
 
 const DATA_DIR = path.resolve(process.cwd(), 'data');
@@ -56,11 +21,6 @@ interface SheetConfig {
   webAppUrl: string;
   lastSyncedAt: string;
   autoSync: boolean;
-  connectedGoogleEmail?: string;
-  connectedGoogleName?: string;
-  connectedGooglePhoto?: string;
-  googleConnectedAt?: string;
-  sharedAccessToken?: string;
 }
 
 interface DatabaseSchema {
@@ -405,90 +365,6 @@ app.post('/api/transaksi', async (req: Request, res: Response) => {
   res.json({ ok: true, transaksi: newTrx, updatedLAB });
 });
 
-app.put('/api/transaksi/:id', async (req: Request, res: Response) => {
-  const { id } = req.params;
-  const updates = req.body;
-  if (!updates) {
-    res.status(400).json({ ok: false, message: 'Data update transaksi tidak valid' });
-    return;
-  }
-
-  const db = readDb();
-  const existingIdx = db.transaksiList.findIndex((t) => t.id === id);
-  if (existingIdx === -1) {
-    res.status(404).json({ ok: false, message: 'Transaksi tidak ditemukan' });
-    return;
-  }
-
-  const oldTrx = db.transaksiList[existingIdx];
-  const updatedTrx = {
-    ...oldTrx,
-    ...updates,
-    id, // Keep the same ID
-    updatedAt: new Date().toISOString(),
-  };
-  db.transaksiList[existingIdx] = updatedTrx;
-
-  // Recalculate all affected LAB(s)
-  const affectedLabIds = new Set<string>();
-  if (oldTrx.idLAB) affectedLabIds.add(oldTrx.idLAB);
-  if (updatedTrx.idLAB) affectedLabIds.add(updatedTrx.idLAB);
-
-  let targetUpdatedLAB: any = null;
-  for (const labId of affectedLabIds) {
-    const labIdx = db.labList.findIndex((l) => l.id === labId);
-    if (labIdx >= 0) {
-      const currentLAB = db.labList[labIdx];
-      const matching = db.transaksiList.filter((t) => t.idLAB === labId);
-      const sumMasuk = matching.reduce((acc, t) => acc + (Number(t.masuk) || 0), 0);
-      const sumKeluar = matching.reduce((acc, t) => acc + (Number(t.keluar) || 0), 0);
-      const saldoAkhir = Number(currentLAB.saldoAwal) + sumMasuk - sumKeluar;
-
-      const updated = {
-        ...currentLAB,
-        totalMasuk: sumMasuk,
-        totalKeluar: sumKeluar,
-        saldoAkhir,
-        trxCount: matching.length,
-      };
-      db.labList[labIdx] = updated;
-      if (labId === updatedTrx.idLAB) {
-        targetUpdatedLAB = updated;
-      }
-    }
-  }
-
-  db.sheetConfig.lastSyncedAt = new Date().toISOString();
-  writeDb(db);
-
-  // Sync update to Google Sheet in background
-  syncToGoogleSheetWebhook('updateTransaksi', updatedTrx);
-
-  res.json({ ok: true, transaksi: updatedTrx, updatedLAB: targetUpdatedLAB });
-});
-
-app.post('/api/auth/shared-google', (req: Request, res: Response) => {
-  const { email, displayName, photoURL, accessToken, disconnect } = req.body;
-  const db = readDb();
-
-  if (disconnect) {
-    delete db.sheetConfig.connectedGoogleEmail;
-    delete db.sheetConfig.connectedGoogleName;
-    delete db.sheetConfig.connectedGooglePhoto;
-    delete db.sheetConfig.sharedAccessToken;
-    delete db.sheetConfig.googleConnectedAt;
-  } else {
-    if (email) db.sheetConfig.connectedGoogleEmail = email;
-    if (displayName) db.sheetConfig.connectedGoogleName = displayName;
-    if (photoURL) db.sheetConfig.connectedGooglePhoto = photoURL;
-    if (accessToken) db.sheetConfig.sharedAccessToken = accessToken;
-    db.sheetConfig.googleConnectedAt = new Date().toISOString();
-  }
-
-  writeDb(db);
-  res.json({ ok: true, sheetConfig: db.sheetConfig });
-});
-
 app.post('/api/lab', async (req: Request, res: Response) => {
   const lab = req.body;
   if (!lab || !lab.nomor || !lab.bulan) {
@@ -628,8 +504,6 @@ app.post('/api/sheet-config', (req: Request, res: Response) => {
 });
 
 async function startServer() {
-  const httpServer = http.createServer(app);
-
   if (process.env.NODE_ENV === 'production' && fs.existsSync(path.resolve(process.cwd(), 'dist'))) {
     app.use(express.static(path.resolve(process.cwd(), 'dist')));
     app.get('*', (req, res) => {
@@ -637,28 +511,15 @@ async function startServer() {
     });
   } else {
     // In dev mode, mount Vite middlewares
-    const isHmrDisabled = process.env.DISABLE_HMR === 'true';
     const vite = await createViteServer({
-      server: {
-        middlewareMode: true,
-        hmr: isHmrDisabled ? false : { server: httpServer },
-      },
+      server: { middlewareMode: true },
       appType: 'spa',
     });
     app.use(vite.middlewares);
   }
 
-  httpServer.listen(PORT, HOST, () => {
-    console.log(`[FIA Server] Always-on shared server running at http://${HOST}:${PORT}`);
-  });
-
-  httpServer.on('error', (err: any) => {
-    if (err.code === 'EADDRINUSE') {
-      console.error(`[FIA Server Error] Port ${PORT} is already in use. Exiting process so supervisor can restart cleanly.`);
-    } else {
-      console.error(`[FIA Server Error]`, err);
-    }
-    process.exit(1);
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`[FIA Server] Always-on shared server running at http://0.0.0.0:${PORT}`);
   });
 }
 

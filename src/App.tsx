@@ -8,22 +8,20 @@ import { TabRAB } from './components/TabRAB';
 import { TabRiwayat } from './components/TabRiwayat';
 import { SheetConfigModal } from './components/SheetConfigModal';
 import { ConfirmModal } from './components/ConfirmModal';
-import { EditTransaksiModal } from './components/EditTransaksiModal';
-import { SignatureConfigModal } from './components/SignatureConfigModal';
+import { UnauthorizedDomainModal } from './components/UnauthorizedDomainModal';
 import { LABRecord, RABRecord, TransaksiRecord } from './types';
 import {
   fetchSharedData,
   persistLAB,
   persistRAB,
   persistTransaksi,
-  updateLocalTransaksi,
   deleteLocalTransaksi,
   deleteLocalLAB,
   deleteLocalRAB,
 } from './services/storage';
-import { initAuth, googleSignIn, logout, AppGoogleUser } from './services/auth';
+import { initAuth, googleSignIn, logout } from './services/auth';
 import { appendRowToSheet, SHEET_ID_KEY, extractSpreadsheetId } from './services/sheets';
-import { subscribeToFirestoreData, getFirestoreSharedAuth } from './services/firestoreService';
+import { subscribeToFirestoreData } from './services/firestoreService';
 import { testFirestoreConnection } from './lib/firebase';
 
 export default function App() {
@@ -35,16 +33,13 @@ export default function App() {
     return localStorage.getItem(SHEET_ID_KEY) || '';
   });
   const [isSheetModalOpen, setIsSheetModalOpen] = useState<boolean>(false);
-  const [isSigModalOpen, setIsSigModalOpen] = useState<boolean>(false);
+  const [isUnauthorizedModalOpen, setIsUnauthorizedModalOpen] = useState<boolean>(false);
+  const [sheetModalInitialTab, setSheetModalInitialTab] = useState<'direct' | 'webhook' | 'backup'>('webhook');
 
   // Auth state for direct Google Sheets API connection
-  const [user, setUser] = useState<User | AppGoogleUser | null>(null);
-  const [sharedGoogleEmail, setSharedGoogleEmail] = useState<string>('');
+  const [user, setUser] = useState<User | null>(null);
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [isLoggingIn, setIsLoggingIn] = useState<boolean>(false);
-
-  // Editing Transaksi state
-  const [editingTransaksi, setEditingTransaksi] = useState<TransaksiRecord | null>(null);
 
   // Shared Multi-user App Data
   const [labList, setLabList] = useState<LABRecord[]>([]);
@@ -115,12 +110,6 @@ export default function App() {
             setSpreadsheetId(data.sheetConfig.spreadsheetId);
             localStorage.setItem(SHEET_ID_KEY, data.sheetConfig.spreadsheetId);
           }
-          if (data.sheetConfig.connectedGoogleEmail) {
-            setSharedGoogleEmail(data.sheetConfig.connectedGoogleEmail);
-          }
-          if (data.sheetConfig.sharedAccessToken && !accessToken) {
-            setAccessToken(data.sheetConfig.sharedAccessToken);
-          }
         }
       }
     } catch (e: any) {
@@ -131,19 +120,12 @@ export default function App() {
     } finally {
       if (!silent) setIsRefreshing(false);
     }
-  }, [showToast, spreadsheetId, accessToken]);
+  }, [showToast, spreadsheetId]);
 
   // Initial load and real-time Firestore auto-sync
   useEffect(() => {
     testFirestoreConnection();
     loadSharedData();
-
-    // Check if Cloud Firestore has shared Google Auth configuration
-    getFirestoreSharedAuth().then((authDoc) => {
-      if (authDoc?.connected && authDoc.email) {
-        setSharedGoogleEmail(authDoc.email);
-      }
-    });
 
     // Real-time Firestore subscription for instantaneous synchronization across all devices
     const unsubscribeFirestore = subscribeToFirestoreData((data) => {
@@ -172,11 +154,19 @@ export default function App() {
       if (result) {
         setUser(result.user);
         setAccessToken(result.accessToken);
-        setSharedGoogleEmail(result.user.email || '');
-        showToast(`Berhasil terhubung ke akun Google: ${result.user.email} (Aktif di Semua Perangkat)`, 'success');
+        showToast(`Berhasil terhubung ke akun Google: ${result.user.email}`, 'success');
       }
     } catch (err: any) {
-      showToast('Gagal menghubungkan akun Google: ' + (err.message || ''), 'error');
+      const isUnauthorizedDomain =
+        err?.code === 'auth/unauthorized-domain' ||
+        (err?.message && String(err.message).includes('auth/unauthorized-domain'));
+
+      if (isUnauthorizedDomain) {
+        setIsUnauthorizedModalOpen(true);
+        showToast('Domain aplikasi belum diizinkan di Firebase. Panduan telah dibuka di layar.', 'error');
+      } else {
+        showToast('Gagal menghubungkan akun Google: ' + (err.message || ''), 'error');
+      }
     } finally {
       setIsLoggingIn(false);
     }
@@ -187,7 +177,6 @@ export default function App() {
       await logout();
       setUser(null);
       setAccessToken(null);
-      setSharedGoogleEmail('');
       showToast('Telah keluar dari akun Google.', 'info');
     } catch (err: any) {
       showToast('Gagal logout: ' + err.message, 'error');
@@ -230,14 +219,6 @@ export default function App() {
 
     await loadSharedData(true);
     return { idLAB: data.idLAB, updatedLAB: res.updatedLAB };
-  };
-
-  const handleSaveEditTransaksi = async (updatedTrx: TransaksiRecord) => {
-    const res = await updateLocalTransaksi(updatedTrx);
-    if (res.ok) {
-      showToast('Perubahan transaksi berhasil disimpan', 'success');
-    }
-    await loadSharedData(true);
   };
 
   const handleSubmitLAB = async (
@@ -377,7 +358,6 @@ export default function App() {
         {/* Navigation & Header */}
         <Navbar
           user={user}
-          sharedGoogleEmail={sharedGoogleEmail}
           onLogin={handleGoogleLogin}
           onLogout={handleGoogleLogout}
           isLoggingIn={isLoggingIn}
@@ -386,7 +366,6 @@ export default function App() {
           isSyncing={isRefreshing}
           onManualSync={() => loadSharedData(false)}
           spreadsheetId={spreadsheetId}
-          onOpenSigModal={() => setIsSigModalOpen(true)}
         />
 
         {/* Desktop / Tablet Tab Switcher (On mobile, uses the bottom nav bar) */}
@@ -445,7 +424,6 @@ export default function App() {
               transaksiList={transaksiList}
               onSubmitTransaksi={handleSubmitTransaksi}
               onRequestDelete={handleRequestDeleteTransaksi}
-              onEditTransaksi={(trx) => setEditingTransaksi(trx)}
               onNotify={showToast}
             />
           )}
@@ -477,9 +455,6 @@ export default function App() {
               onNotify={showToast}
               onRequestDeleteLAB={handleRequestDeleteLAB}
               onRequestDeleteRAB={handleRequestDeleteRAB}
-              onEditTransaksi={(trx) => setEditingTransaksi(trx)}
-              onRequestDeleteTransaksi={handleRequestDeleteTransaksi}
-              onOpenSigModal={() => setIsSigModalOpen(true)}
             />
           )}
         </main>
@@ -496,27 +471,6 @@ export default function App() {
         onChangeTab={(t) => setActiveTab(t)}
       />
 
-      {/* Edit Transaksi Modal */}
-      <EditTransaksiModal
-        isOpen={editingTransaksi !== null}
-        onClose={() => setEditingTransaksi(null)}
-        transaksi={editingTransaksi}
-        labList={labList}
-        onSave={handleSaveEditTransaksi}
-        onDelete={(t) => {
-          setEditingTransaksi(null);
-          handleRequestDeleteTransaksi(t);
-        }}
-        onNotify={showToast}
-      />
-
-      {/* Signature Position Config Modal */}
-      <SignatureConfigModal
-        isOpen={isSigModalOpen}
-        onClose={() => setIsSigModalOpen(false)}
-        onNotify={showToast}
-      />
-
       {/* Modals & Toast */}
       <SheetConfigModal
         isOpen={isSheetModalOpen}
@@ -527,7 +481,6 @@ export default function App() {
         onNotify={showToast}
         initialWebAppUrl={webAppUrl}
         user={user}
-        sharedGoogleEmail={sharedGoogleEmail}
         accessToken={accessToken}
         onLogin={handleGoogleLogin}
         onLogout={handleGoogleLogout}
@@ -540,6 +493,8 @@ export default function App() {
         labList={labList}
         transaksiList={transaksiList}
         rabList={rabList}
+        onOpenUnauthorizedDomainGuide={() => setIsUnauthorizedModalOpen(true)}
+        initialTab={sheetModalInitialTab}
       />
 
       <ConfirmModal
@@ -548,6 +503,16 @@ export default function App() {
         message={confirmModal.message}
         onConfirm={confirmModal.onConfirm}
         onCancel={() => setConfirmModal((prev) => ({ ...prev, isOpen: false }))}
+      />
+
+      <UnauthorizedDomainModal
+        isOpen={isUnauthorizedModalOpen}
+        onClose={() => setIsUnauthorizedModalOpen(false)}
+        onRetryLogin={handleGoogleLogin}
+        onSwitchToWebhook={() => {
+          setSheetModalInitialTab('webhook');
+          setIsSheetModalOpen(true);
+        }}
       />
 
       {/* Floating Toast Notification */}

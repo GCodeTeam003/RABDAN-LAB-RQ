@@ -3,11 +3,8 @@
     "spreadsheetName": "Database Keuangan RQ Ulul Azmi (RAB & LAB)",
     "spreadsheetId": "",
     "webAppUrl": "https://script.google.com/macros/s/AKfycby_qu393Ks92Sqp6NhkObIjiuTmQo4nDcCOPCc7uTOh2y4ikulZVA2dopXk9Ve0nYZo/exec",
-    "lastSyncedAt": "2026-11-04T09:59:14.816Z",
-    "autoSync": true,
-    "connectedGoogleEmail": "alucardhero91@gmail.com",
-    "connectedGoogleName": "Alucard Hero",
-    "googleConnectedAt": "2026-11-04T09:59:18.908Z"
+    "lastSyncedAt": "2026-11-03T15:35:35.487Z",
+    "autoSync": true
   },
   "labList": [
     {
@@ -20,9 +17,9 @@
       "ketuaRQ": "AL MUTAQIN",
       "bendaharaRQ": "HAMIDAH FAUZIYAH",
       "saldoAwal": 5000000,
-      "totalMasuk": 4650000,
+      "totalMasuk": 4600000,
       "totalKeluar": 1850000,
-      "saldoAkhir": 7800000,
+      "saldoAkhir": 7750000,
       "trxCount": 4,
       "hasLink": true,
       "createdAt": "2026-11-01T07:00:00.000Z"
@@ -49,12 +46,11 @@
     {
       "id": "trx-1793720135464",
       "idLAB": "lab-2026-11",
-      "tanggal": "2026-11-04",
-      "keterangan": "Donasi Wakaf Meja Quran (Diperbarui)",
-      "masuk": 900000,
+      "tanggal": "2026-11-03",
+      "keterangan": "Donasi Wakaf Meja Quran",
+      "masuk": 850000,
       "keluar": 0,
-      "createdAt": "2026-11-03T15:35:35.464Z",
-      "updatedAt": "2026-11-04T09:59:14.816Z"
+      "createdAt": "2026-11-03T15:35:35.464Z"
     },
     {
       "id": "trx-101",

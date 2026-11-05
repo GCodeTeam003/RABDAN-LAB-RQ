@@ -15,8 +15,8 @@ import {
   SendHorizontal,
   Code2,
   Database,
+  ShieldAlert,
 } from 'lucide-react';
-import { AppGoogleUser } from '../services/auth';
 import { updateSheetConfig } from '../services/storage';
 import {
   createDatabaseSpreadsheet,
@@ -34,8 +34,7 @@ interface SheetConfigModalProps {
   setSheetTitle: (title: string) => void;
   onNotify: (msg: string, type?: 'success' | 'error' | 'info') => void;
   initialWebAppUrl?: string;
-  user: User | AppGoogleUser | null;
-  sharedGoogleEmail?: string;
+  user: User | null;
   accessToken: string | null;
   onLogin: () => Promise<void>;
   onLogout: () => Promise<void>;
@@ -45,6 +44,8 @@ interface SheetConfigModalProps {
   labList: LABRecord[];
   transaksiList: TransaksiRecord[];
   rabList: RABRecord[];
+  onOpenUnauthorizedDomainGuide?: () => void;
+  initialTab?: 'direct' | 'webhook' | 'backup';
 }
 
 export const SheetConfigModal: React.FC<SheetConfigModalProps> = ({
@@ -56,7 +57,6 @@ export const SheetConfigModal: React.FC<SheetConfigModalProps> = ({
   onNotify,
   initialWebAppUrl = '',
   user,
-  sharedGoogleEmail,
   accessToken,
   onLogin,
   onLogout,
@@ -66,6 +66,8 @@ export const SheetConfigModal: React.FC<SheetConfigModalProps> = ({
   labList,
   transaksiList,
   rabList,
+  onOpenUnauthorizedDomainGuide,
+  initialTab = 'webhook',
 }) => {
   const [webAppUrl, setWebAppUrl] = useState(initialWebAppUrl);
   const [inputSheetId, setInputSheetId] = useState(spreadsheetId);
@@ -78,7 +80,13 @@ export const SheetConfigModal: React.FC<SheetConfigModalProps> = ({
   const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null);
   const [copiedCode, setCopiedCode] = useState(false);
   const [showCode, setShowCode] = useState(false);
-  const [activeTab, setActiveTab] = useState<'direct' | 'webhook' | 'backup'>('direct');
+  const [activeTab, setActiveTab] = useState<'direct' | 'webhook' | 'backup'>(initialTab);
+
+  React.useEffect(() => {
+    if (initialTab) {
+      setActiveTab(initialTab);
+    }
+  }, [initialTab, isOpen]);
 
   if (!isOpen) return null;
 
@@ -338,33 +346,36 @@ function doPost(e) {
         </div>
 
         {/* Tab Selection */}
-        <div className="flex border-b border-slate-200 mt-3 text-xs font-semibold">
-          <button
-            type="button"
-            onClick={() => setActiveTab('direct')}
-            className={`py-2 px-3 border-b-2 transition-colors ${
-              activeTab === 'direct'
-                ? 'border-emerald-600 text-emerald-700 font-bold'
-                : 'border-transparent text-slate-500 hover:text-slate-700'
-            }`}
-          >
-            Metode 1: Google API (Resmi & Cepat)
-          </button>
+        <div className="flex border-b border-slate-200 mt-3 text-xs font-semibold overflow-x-auto">
           <button
             type="button"
             onClick={() => setActiveTab('webhook')}
-            className={`py-2 px-3 border-b-2 transition-colors ${
+            className={`py-2 px-3 border-b-2 transition-colors flex items-center gap-1.5 shrink-0 ${
               activeTab === 'webhook'
                 ? 'border-emerald-600 text-emerald-700 font-bold'
                 : 'border-transparent text-slate-500 hover:text-slate-700'
             }`}
           >
-            Metode 2: Apps Script (Tanpa Login)
+            <span>Metode 2: Apps Script (Bebas Login ⭐)</span>
+            <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-emerald-100 text-emerald-800 font-bold border border-emerald-300">
+              Rekomendasi
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('direct')}
+            className={`py-2 px-3 border-b-2 transition-colors shrink-0 ${
+              activeTab === 'direct'
+                ? 'border-emerald-600 text-emerald-700 font-bold'
+                : 'border-transparent text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            Metode 1: Google API (Perlu Login)
           </button>
           <button
             type="button"
             onClick={() => setActiveTab('backup')}
-            className={`py-2 px-3 border-b-2 transition-colors ${
+            className={`py-2 px-3 border-b-2 transition-colors shrink-0 ${
               activeTab === 'backup'
                 ? 'border-emerald-600 text-emerald-700 font-bold'
                 : 'border-transparent text-slate-500 hover:text-slate-700'
@@ -379,53 +390,50 @@ function doPost(e) {
           {activeTab === 'direct' && (
             <div className="space-y-3">
               {/* Google Sign In status */}
-              {(() => {
-                const activeEmail = user?.email || sharedGoogleEmail;
-                return activeEmail ? (
-                  <div className="p-3.5 rounded-2xl bg-emerald-50/90 border border-emerald-300 space-y-2">
-                    <div className="flex items-center justify-between gap-2">
-                      <div>
-                        <div className="flex items-center gap-1.5 text-[11px] text-emerald-800 uppercase tracking-wider font-bold">
-                          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                          <span>Akun Google Terhubung Global</span>
-                        </div>
-                        <div className="font-bold text-emerald-950 text-xs sm:text-sm truncate max-w-[220px]">
-                          {activeEmail}
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={onLogout}
-                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl border border-rose-200 bg-white hover:bg-rose-50 text-rose-700 text-xs font-semibold cursor-pointer transition-colors"
-                      >
-                        <LogOut className="w-3.5 h-3.5" />
-                        <span>Putuskan</span>
-                      </button>
-                    </div>
-                    <p className="text-[11px] text-emerald-800/95 leading-relaxed bg-white/70 p-2 rounded-xl border border-emerald-200/60">
-                      ✅ <strong>Cukup Sekali Login:</strong> Akun ini telah tersimpan di Cloud Database FIA. Jika Anda berpindah ke HP, laptop, atau perangkat lain, sistem langsung terhubung otomatis ke spreadsheet ini tanpa perlu login ulang!
-                    </p>
+              <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200 flex items-center justify-between gap-2">
+                <div>
+                  <div className="text-[11px] text-slate-500 uppercase tracking-wider font-bold">Status Akun Google</div>
+                  <div className="font-semibold text-slate-800 text-xs sm:text-sm truncate max-w-[200px]">
+                    {user ? user.email : 'Belum Terhubung'}
                   </div>
+                </div>
+                {user ? (
+                  <button
+                    type="button"
+                    onClick={onLogout}
+                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl border border-slate-300 bg-white hover:bg-slate-100 text-slate-700 text-xs font-semibold"
+                  >
+                    <LogOut className="w-3.5 h-3.5" />
+                    <span>Keluar</span>
+                  </button>
                 ) : (
-                  <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200 flex items-center justify-between gap-2">
-                    <div>
-                      <div className="text-[11px] text-slate-500 uppercase tracking-wider font-bold">Status Akun Google</div>
-                      <div className="font-semibold text-slate-800 text-xs sm:text-sm truncate max-w-[200px]">
-                        Belum Terhubung
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={onLogin}
-                      disabled={isLoggingIn}
-                      className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-xs disabled:opacity-50 cursor-pointer"
-                    >
-                      <LogIn className="w-3.5 h-3.5" />
-                      <span>{isLoggingIn ? 'Menghubungkan...' : 'Masuk dengan Google'}</span>
-                    </button>
-                  </div>
-                );
-              })()}
+                  <button
+                    type="button"
+                    onClick={onLogin}
+                    disabled={isLoggingIn}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-xs disabled:opacity-50"
+                  >
+                    <LogIn className="w-3.5 h-3.5" />
+                    <span>{isLoggingIn ? 'Menghubungkan...' : 'Masuk dengan Google'}</span>
+                  </button>
+                )}
+              </div>
+
+              {!user && onOpenUnauthorizedDomainGuide && (
+                <div className="flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-xl bg-amber-50/70 border border-amber-200/80 text-[11px] text-amber-900">
+                  <span className="flex items-center gap-1.5">
+                    <ShieldAlert className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                    <span>Muncul <em>auth/unauthorized-domain</em> saat login?</span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={onOpenUnauthorizedDomainGuide}
+                    className="font-bold text-emerald-800 hover:text-emerald-950 underline shrink-0 cursor-pointer"
+                  >
+                    Atasi di sini
+                  </button>
+                </div>
+              )}
 
               {/* Spreadsheet ID / Link Input */}
               <div className="space-y-1">
