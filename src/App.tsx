@@ -399,6 +399,7 @@ export default function App() {
           isSyncing={isRefreshing}
           onManualSync={() => loadSharedData(false)}
           spreadsheetId={spreadsheetId}
+          webAppUrl={webAppUrl}
         />
 
         {/* Desktop / Tablet Tab Switcher (On mobile, uses the bottom nav bar) */}
