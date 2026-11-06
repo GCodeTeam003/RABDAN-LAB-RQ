@@ -4,11 +4,13 @@ import {
   saveFirestoreLAB,
   saveFirestoreRAB,
   saveFirestoreTransaksi,
+  saveFirestoreSheetConfig,
   deleteFirestoreLAB,
   deleteFirestoreRAB,
   deleteFirestoreTransaksi,
   clearFirestoreAllData,
 } from './firestoreService';
+import { SHEET_ID_KEY } from './sheets';
 
 const STORAGE_LAB_KEY = 'rq_ulul_azmi_lab_master_v1';
 const STORAGE_RAB_KEY = 'rq_ulul_azmi_rab_master_v1';
@@ -57,48 +59,71 @@ export async function fetchSharedData(): Promise<{
   transaksiList: TransaksiRecord[];
   sheetConfig?: any;
 }> {
+  // Always query centralized server config to guarantee latest sheetConfig
+  let serverConfig: any = null;
+  let serverData: any = null;
+  try {
+    const res = await fetch('/api/data');
+    if (res.ok) {
+      serverData = await res.json();
+      if (serverData?.ok && serverData.sheetConfig) {
+        serverConfig = serverData.sheetConfig;
+      }
+    }
+  } catch (e) {
+    console.warn('Server fetch notice:', e);
+  }
+
   // 1. Try fetching from Cloud Firestore
   try {
     const firestoreData = await getFirestoreAllData();
+    const resolvedConfig = firestoreData.sheetConfig || serverConfig;
+
+    if (resolvedConfig?.spreadsheetId) {
+      localStorage.setItem(SHEET_ID_KEY, resolvedConfig.spreadsheetId);
+    }
+
     if (
       firestoreData.labList.length > 0 ||
       firestoreData.rabList.length > 0 ||
-      firestoreData.transaksiList.length > 0
+      firestoreData.transaksiList.length > 0 ||
+      resolvedConfig
     ) {
       saveLocalData(
         firestoreData.labList,
         firestoreData.rabList,
         firestoreData.transaksiList
       );
-      return firestoreData;
+      return {
+        labList: firestoreData.labList,
+        rabList: firestoreData.rabList,
+        transaksiList: firestoreData.transaksiList,
+        sheetConfig: resolvedConfig,
+      };
     }
   } catch (err) {
     console.warn('Firestore fetch notice, trying server fallback:', err);
   }
 
   // 2. Fallback to centralized server API
-  try {
-    const res = await fetch('/api/data');
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const json = await res.json();
-    if (json.ok) {
-      saveLocalData(json.labList, json.rabList, json.transaksiList);
-
-      // Seed server data to Cloud Firestore if Firestore was empty
-      seedToFirestoreIfEmpty(json.labList, json.rabList, json.transaksiList);
-
-      return {
-        labList: json.labList,
-        rabList: json.rabList,
-        transaksiList: json.transaksiList,
-        sheetConfig: json.sheetConfig,
-      };
+  if (serverData && serverData.ok) {
+    saveLocalData(serverData.labList, serverData.rabList, serverData.transaksiList);
+    if (serverData.sheetConfig?.spreadsheetId) {
+      localStorage.setItem(SHEET_ID_KEY, serverData.sheetConfig.spreadsheetId);
     }
-  } catch (err) {
-    console.warn('Server fetch failed, falling back to local mirror:', err);
+
+    // Seed server data to Cloud Firestore if Firestore was empty
+    seedToFirestoreIfEmpty(serverData.labList, serverData.rabList, serverData.transaksiList);
+
+    return {
+      labList: serverData.labList,
+      rabList: serverData.rabList,
+      transaksiList: serverData.transaksiList,
+      sheetConfig: serverData.sheetConfig,
+    };
   }
 
-  return getLocalData();
+  return { ...getLocalData(), sheetConfig: serverConfig };
 }
 
 async function seedToFirestoreIfEmpty(
@@ -327,13 +352,26 @@ export async function deleteLocalRAB(idRAB: string): Promise<boolean> {
 }
 
 /**
- * Update Google Sheet webhook / sync config
+ * Update Google Sheet webhook / sync config permanently in Firestore & Server
  */
 export async function updateSheetConfig(config: {
   spreadsheetName?: string;
   spreadsheetId?: string;
   webAppUrl?: string;
 }): Promise<boolean> {
+  // 1. Immediately store to local storage
+  if (config.spreadsheetId) {
+    localStorage.setItem(SHEET_ID_KEY, config.spreadsheetId);
+  }
+
+  // 2. Save permanently to Cloud Firestore
+  try {
+    await saveFirestoreSheetConfig(config);
+  } catch (err) {
+    console.warn('Failed saving sheet config to Firestore:', err);
+  }
+
+  // 3. Save to Centralized Server API
   try {
     const res = await fetch('/api/sheet-config', {
       method: 'POST',

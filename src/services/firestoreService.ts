@@ -2,6 +2,7 @@ import {
   collection,
   doc,
   setDoc,
+  getDoc,
   getDocs,
   deleteDoc,
   onSnapshot,
@@ -12,20 +13,69 @@ import { LABRecord, RABRecord, TransaksiRecord } from '../types';
 export const LAB_COLLECTION = 'lab';
 export const TRANSAKSI_COLLECTION = 'transaksi';
 export const RAB_COLLECTION = 'rab';
+export const SETTINGS_COLLECTION = 'settings';
+export const SHEET_CONFIG_DOC_ID = 'sheet_config';
+
+export interface SheetConfigData {
+  spreadsheetName?: string;
+  spreadsheetId?: string;
+  webAppUrl?: string;
+  updatedAt?: string;
+}
 
 /**
- * Fetch all documents from Firestore collections
+ * Save Google Sheet configuration permanently to Cloud Firestore
+ */
+export async function saveFirestoreSheetConfig(config: SheetConfigData): Promise<void> {
+  const docRef = doc(db, SETTINGS_COLLECTION, SHEET_CONFIG_DOC_ID);
+  try {
+    await setDoc(
+      docRef,
+      {
+        spreadsheetName: config.spreadsheetName || 'Database Keuangan RQ Ulul Azmi (RAB & LAB)',
+        spreadsheetId: config.spreadsheetId || '',
+        webAppUrl: config.webAppUrl || '',
+        updatedAt: new Date().toISOString(),
+      },
+      { merge: true }
+    );
+  } catch (err) {
+    handleFirestoreError(err, OperationType.WRITE, `${SETTINGS_COLLECTION}/${SHEET_CONFIG_DOC_ID}`);
+  }
+}
+
+/**
+ * Get Google Sheet configuration from Cloud Firestore
+ */
+export async function getFirestoreSheetConfig(): Promise<SheetConfigData | null> {
+  const docRef = doc(db, SETTINGS_COLLECTION, SHEET_CONFIG_DOC_ID);
+  try {
+    const snap = await getDoc(docRef);
+    if (snap.exists()) {
+      return snap.data() as SheetConfigData;
+    }
+    return null;
+  } catch (err) {
+    handleFirestoreError(err, OperationType.GET, `${SETTINGS_COLLECTION}/${SHEET_CONFIG_DOC_ID}`);
+    return null;
+  }
+}
+
+/**
+ * Fetch all documents and persistent settings from Firestore collections
  */
 export async function getFirestoreAllData(): Promise<{
   labList: LABRecord[];
   rabList: RABRecord[];
   transaksiList: TransaksiRecord[];
+  sheetConfig?: SheetConfigData;
 }> {
   try {
-    const [labSnap, rabSnap, trxSnap] = await Promise.all([
+    const [labSnap, rabSnap, trxSnap, configSnap] = await Promise.all([
       getDocs(collection(db, LAB_COLLECTION)),
       getDocs(collection(db, RAB_COLLECTION)),
       getDocs(collection(db, TRANSAKSI_COLLECTION)),
+      getDoc(doc(db, SETTINGS_COLLECTION, SHEET_CONFIG_DOC_ID)),
     ]);
 
     const labList = labSnap.docs.map((d) => ({ id: d.id, ...d.data() } as LABRecord));
@@ -33,8 +83,9 @@ export async function getFirestoreAllData(): Promise<{
     const transaksiList = trxSnap.docs.map(
       (d) => ({ id: d.id, ...d.data() } as TransaksiRecord)
     );
+    const sheetConfig = configSnap.exists() ? (configSnap.data() as SheetConfigData) : undefined;
 
-    return { labList, rabList, transaksiList };
+    return { labList, rabList, transaksiList, sheetConfig };
   } catch (err) {
     handleFirestoreError(err, OperationType.GET, 'all_collections');
     return { labList: [], rabList: [], transaksiList: [] };
@@ -49,17 +100,28 @@ export function subscribeToFirestoreData(
     labList: LABRecord[];
     rabList: RABRecord[];
     transaksiList: TransaksiRecord[];
+    sheetConfig?: SheetConfigData;
   }) => void
 ) {
   let currentLab: LABRecord[] = [];
   let currentRab: RABRecord[] = [];
   let currentTrx: TransaksiRecord[] = [];
+  let currentConfig: SheetConfigData | undefined = undefined;
+
+  const triggerUpdate = () => {
+    onUpdate({
+      labList: currentLab,
+      rabList: currentRab,
+      transaksiList: currentTrx,
+      sheetConfig: currentConfig,
+    });
+  };
 
   const unsubLab = onSnapshot(
     collection(db, LAB_COLLECTION),
     (snap) => {
       currentLab = snap.docs.map((d) => ({ id: d.id, ...d.data() } as LABRecord));
-      onUpdate({ labList: currentLab, rabList: currentRab, transaksiList: currentTrx });
+      triggerUpdate();
     },
     (error) => {
       handleFirestoreError(error, OperationType.GET, LAB_COLLECTION);
@@ -70,7 +132,7 @@ export function subscribeToFirestoreData(
     collection(db, RAB_COLLECTION),
     (snap) => {
       currentRab = snap.docs.map((d) => ({ id: d.id, ...d.data() } as RABRecord));
-      onUpdate({ labList: currentLab, rabList: currentRab, transaksiList: currentTrx });
+      triggerUpdate();
     },
     (error) => {
       handleFirestoreError(error, OperationType.GET, RAB_COLLECTION);
@@ -81,10 +143,23 @@ export function subscribeToFirestoreData(
     collection(db, TRANSAKSI_COLLECTION),
     (snap) => {
       currentTrx = snap.docs.map((d) => ({ id: d.id, ...d.data() } as TransaksiRecord));
-      onUpdate({ labList: currentLab, rabList: currentRab, transaksiList: currentTrx });
+      triggerUpdate();
     },
     (error) => {
       handleFirestoreError(error, OperationType.GET, TRANSAKSI_COLLECTION);
+    }
+  );
+
+  const unsubConfig = onSnapshot(
+    doc(db, SETTINGS_COLLECTION, SHEET_CONFIG_DOC_ID),
+    (snap) => {
+      if (snap.exists()) {
+        currentConfig = snap.data() as SheetConfigData;
+        triggerUpdate();
+      }
+    },
+    (error) => {
+      handleFirestoreError(error, OperationType.GET, `${SETTINGS_COLLECTION}/${SHEET_CONFIG_DOC_ID}`);
     }
   );
 
@@ -92,6 +167,7 @@ export function subscribeToFirestoreData(
     unsubLab();
     unsubRab();
     unsubTrx();
+    unsubConfig();
   };
 }
 

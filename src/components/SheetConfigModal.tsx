@@ -21,6 +21,7 @@ import {
   Unlock,
   KeyRound,
   Trash2,
+  CheckCircle2,
 } from 'lucide-react';
 import { updateSheetConfig } from '../services/storage';
 import {
@@ -112,6 +113,12 @@ export const SheetConfigModal: React.FC<SheetConfigModalProps> = ({
       setWebAppUrl(initialWebAppUrl);
     }
   }, [initialWebAppUrl]);
+
+  React.useEffect(() => {
+    if (spreadsheetId) {
+      setInputSheetId(spreadsheetId);
+    }
+  }, [spreadsheetId, isOpen]);
 
   if (!isOpen) return null;
 
@@ -338,6 +345,33 @@ function doPost(e) {
       onNotify('Gagal menyinkronkan ke Google Sheet: ' + err.message, 'error');
     } finally {
       setIsPushingData(false);
+    }
+  };
+
+  const handleSaveDirectSheetId = async () => {
+    const cleanedId = extractSpreadsheetId(inputSheetId);
+    if (!cleanedId) {
+      onNotify('Silakan masukkan tautan atau ID Google Spreadsheet yang valid.', 'error');
+      return;
+    }
+    setIsSaving(true);
+    try {
+      await updateSheetConfig({
+        spreadsheetName,
+        spreadsheetId: cleanedId,
+        webAppUrl,
+      });
+      setSpreadsheetId(cleanedId);
+      setInputSheetId(cleanedId);
+      onNotify(
+        'ID Google Spreadsheet berhasil disimpan permanen di Cloud Firestore! Tidak perlu ditautkan ulang lagi saat login atau reload.',
+        'success'
+      );
+      await onSync();
+    } catch (err: any) {
+      onNotify('Gagal menyimpan ID: ' + err.message, 'error');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -841,8 +875,29 @@ function doPost(e) {
                     </div>
                   )}
 
+                  {/* Permanent Connected Status Card */}
+                  {currentSheetId && (
+                    <div className="p-3 rounded-2xl bg-emerald-50 border border-emerald-300 text-xs text-emerald-950 space-y-1 shadow-2xs">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold flex items-center gap-1.5 text-emerald-900">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                          <span>Status: Terhubung Permanen di Cloud</span>
+                        </span>
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-700 text-white">
+                          Terkunci Otomatis
+                        </span>
+                      </div>
+                      <div className="font-mono text-[11px] bg-white px-2.5 py-1.5 rounded-lg border border-emerald-200 break-all select-all text-slate-800">
+                        {currentSheetId}
+                      </div>
+                      <p className="text-[11px] text-emerald-800 leading-relaxed">
+                        ID ini sudah tersimpan permanen di Cloud Firestore. <strong>Tidak perlu menautkan ulang setiap kali login atau membuka dari HP lain!</strong>
+                      </p>
+                    </div>
+                  )}
+
                   {/* Spreadsheet ID / Link Input */}
-                  <div className="space-y-1">
+                  <div className="space-y-1.5">
                     <label className="text-xs font-bold text-slate-700">
                       Tautan atau ID Google Spreadsheet Anda
                     </label>
@@ -853,6 +908,17 @@ function doPost(e) {
                       placeholder="https://docs.google.com/spreadsheets/d/1abc.../edit atau ID"
                       className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs font-mono bg-white focus:outline-none focus:border-emerald-500"
                     />
+                    <div className="flex gap-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={handleSaveDirectSheetId}
+                        disabled={isSaving || !inputSheetId.trim()}
+                        className="flex-1 py-2 px-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-xs transition-colors disabled:opacity-50 cursor-pointer"
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                        <span>{isSaving ? 'Menyimpan...' : 'Simpan & Kunci ID Ini Permanen di Cloud'}</span>
+                      </button>
+                    </div>
                   </div>
 
                   {/* Actions */}

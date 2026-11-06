@@ -10,6 +10,7 @@ import { SheetConfigModal } from './components/SheetConfigModal';
 import { ConfirmModal } from './components/ConfirmModal';
 import { UnauthorizedDomainModal } from './components/UnauthorizedDomainModal';
 import { EditTransaksiModal } from './components/EditTransaksiModal';
+import { FinancialSummaryBanner } from './components/FinancialSummaryBanner';
 import { LABRecord, RABRecord, TransaksiRecord } from './types';
 import {
   fetchSharedData,
@@ -111,7 +112,7 @@ export default function App() {
           if (data.sheetConfig.webAppUrl) {
             setWebAppUrl(data.sheetConfig.webAppUrl);
           }
-          if (data.sheetConfig.spreadsheetId && !spreadsheetId) {
+          if (data.sheetConfig.spreadsheetId) {
             setSpreadsheetId(data.sheetConfig.spreadsheetId);
             localStorage.setItem(SHEET_ID_KEY, data.sheetConfig.spreadsheetId);
           }
@@ -125,7 +126,7 @@ export default function App() {
     } finally {
       if (!silent) setIsRefreshing(false);
     }
-  }, [showToast, spreadsheetId]);
+  }, [showToast]);
 
   // Initial load and real-time Firestore auto-sync
   useEffect(() => {
@@ -138,6 +139,18 @@ export default function App() {
         setLabList(data.labList);
         setRabList(data.rabList);
         setTransaksiList(data.transaksiList);
+      }
+      if (data.sheetConfig) {
+        if (data.sheetConfig.spreadsheetId) {
+          setSpreadsheetId(data.sheetConfig.spreadsheetId);
+          localStorage.setItem(SHEET_ID_KEY, data.sheetConfig.spreadsheetId);
+        }
+        if (data.sheetConfig.spreadsheetName) {
+          setSheetTitle(data.sheetConfig.spreadsheetName);
+        }
+        if (data.sheetConfig.webAppUrl) {
+          setWebAppUrl(data.sheetConfig.webAppUrl);
+        }
       }
     });
 
@@ -160,6 +173,8 @@ export default function App() {
         setUser(result.user);
         setAccessToken(result.accessToken);
         showToast(`Berhasil terhubung ke akun Google: ${result.user.email}`, 'success');
+        // Ensure shared data & persistent spreadsheet ID stay loaded
+        await loadSharedData(true);
       }
     } catch (err: any) {
       const isUnauthorizedDomain =
@@ -400,6 +415,12 @@ export default function App() {
           onManualSync={() => loadSharedData(false)}
           spreadsheetId={spreadsheetId}
           webAppUrl={webAppUrl}
+        />
+
+        {/* Real-time Financial Summary Banner (Saldo Awal, Total Masuk, Total Keluar, Saldo Akhir, Jumlah Transaksi) */}
+        <FinancialSummaryBanner
+          labList={labList}
+          transaksiList={transaksiList}
         />
 
         {/* Desktop / Tablet Tab Switcher (On mobile, uses the bottom nav bar) */}
